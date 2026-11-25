@@ -48,3 +48,12 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Desktop store frame: while the header is auto-hidden, the product frame
+   slides up and fills the viewport instead of leaving a 4rem band above it. */
+@media (min-width: 1024px) {
+  html[data-bars-hidden='true'] .desktop-app-frame {
+    height: 100dvh;
+    transform: translateY(-4rem);
+  }
+}

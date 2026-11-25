@@ -95,7 +95,7 @@ export const StorefrontHome: React.FC<StorefrontHomeProps> = ({
   return (
     // On desktop the page under the header is a fixed frame: the left rail and
     // the product panel stay put and only the product column scrolls.
-    <div className="max-w-[1440px] mx-auto px-4 sm:px-6 py-5 sm:py-6 lg:h-[calc(100dvh-4rem)] lg:overflow-hidden">
+    <div className="desktop-app-frame max-w-[1440px] mx-auto px-4 sm:px-6 py-5 sm:py-6 lg:h-[calc(100dvh-4rem)] lg:overflow-hidden lg:transition-[transform,height] lg:duration-300 lg:ease-out">
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start lg:h-full lg:items-stretch">
         {/* Left Navigation Sidebar */}
         <aside className="hidden lg:flex lg:col-span-2 flex-col gap-5 lg:h-full lg:min-h-0 lg:overflow-y-auto lg:overscroll-contain">

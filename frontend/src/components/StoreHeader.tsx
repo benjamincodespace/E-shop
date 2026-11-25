@@ -6,8 +6,64 @@ import { useStore } from '@/context/StoreContext';
 import { calculateCartSummary } from '@/lib/storeLogic';
 import { BrandLogo } from './BrandLogo';
 
+/**
+ * Tucks the sticky header and the fixed mobile bottom bar away while the
+ * customer scrolls up, and brings them back as soon as they scroll down again
+ * (they are always visible at the top of the page). Scroll events are captured
+ * at the window so nested scroll containers (the desktop product column)
+ * drive it too.
+ */
+function useAutoHideBars(): boolean {
+  const [hidden, setHidden] = useState(false);
+
+  useEffect(() => {
+    const positions = new Map<EventTarget, number>();
+    let frame = 0;
+
+    const onScroll = (event: Event) => {
+      const target = event.target as EventTarget;
+      const element = target instanceof HTMLElement ? target : null;
+      const y = element ? element.scrollTop : window.scrollY;
+      const previous = positions.get(target);
+      positions.set(target, y);
+      if (previous === undefined) return;
+
+      const delta = y - previous;
+      if (y <= 16) {
+        if (frame) cancelAnimationFrame(frame);
+        frame = 0;
+        setHidden(false);
+        return;
+      }
+      if (frame || Math.abs(delta) < 8) return;
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        // Scrolling up hides both bars; scrolling down shows them again.
+        setHidden(delta < 0);
+      });
+    };
+
+    window.addEventListener('scroll', onScroll, { capture: true, passive: true });
+    return () => {
+      if (frame) cancelAnimationFrame(frame);
+      window.removeEventListener('scroll', onScroll, { capture: true });
+    };
+  }, []);
+
+  // Lets the desktop home frame expand while the header is out of the way.
+  useEffect(() => {
+    document.documentElement.dataset.barsHidden = hidden ? 'true' : 'false';
+    return () => {
+      delete document.documentElement.dataset.barsHidden;
+    };
+  }, [hidden]);
+
+  return hidden;
+}
+
 export const StoreHeader: React.FC = () => {
   const { route, navigate, cart, wishlistIds, user, globalSearch, setGlobalSearch } = useStore();
+  const barsHidden = useAutoHideBars();
   const [localSearch, setLocalSearch] = useState(globalSearch);
   const { itemCount } = calculateCartSummary(cart);
 
@@ -25,7 +81,12 @@ export const StoreHeader: React.FC = () => {
   };
 
   return (
-    <header className="sticky top-0 z-30 glass-surface border-b border-neutral-200/80">
+    <header
+      className={`sticky top-0 z-30 glass-surface border-b border-neutral-200/80 transition-transform duration-300 ease-out ${
+        barsHidden ? '-translate-y-full' : 'translate-y-0'
+      }`}
+      inert={barsHidden ? true : undefined}
+    >
       <div className="max-w-[1440px] mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4 sm:gap-8">
         {/* Zone 1: Brand Wordmark */}
         <button
@@ -161,6 +222,7 @@ export const StoreHeader: React.FC = () => {
 
 export const MobileBottomNav: React.FC = () => {
   const { route, navigate, user } = useStore();
+  const barsHidden = useAutoHideBars();
 
   const items = [
     { page: 'home' as const, label: 'Home', icon: Home },
@@ -172,7 +234,10 @@ export const MobileBottomNav: React.FC = () => {
   return (
     <nav
       aria-label="Mobile navigation"
-      className="lg:hidden fixed bottom-0 inset-x-0 z-30 glass-surface border-t border-neutral-200/80 px-2 py-2 flex items-center justify-around"
+      className={`lg:hidden fixed bottom-0 inset-x-0 z-30 glass-surface border-t border-neutral-200/80 px-2 py-2 flex items-center justify-around transition-transform duration-300 ease-out ${
+        barsHidden ? 'translate-y-full' : 'translate-y-0'
+      }`}
+      inert={barsHidden ? true : undefined}
     >
       {items.map((it) => {
         const Icon = it.icon;
