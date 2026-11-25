@@ -34,10 +34,38 @@ func ConnectMongo(ctx context.Context, uri, dbName string) (*StoreDB, error) {
 	return s, nil
 }
 
+// dropLegacyEmailIndex removes the old non-sparse unique email index. Accounts
+// created with a phone number only have no email, and a non-sparse unique index
+// would let just one of them exist.
+func (s *StoreDB) dropLegacyEmailIndex(ctx context.Context) {
+	coll := s.DB.Collection("users")
+	cur, err := coll.Indexes().List(ctx)
+	if err != nil {
+		return
+	}
+	defer cur.Close(ctx)
+	for cur.Next(ctx) {
+		var spec struct {
+			Name   string `bson:"name"`
+			Key    bson.M `bson:"key"`
+			Unique bool   `bson:"unique"`
+			Sparse bool   `bson:"sparse"`
+		}
+		if cur.Decode(&spec) != nil || spec.Name == "_id_" {
+			continue
+		}
+		if _, isEmail := spec.Key["email"]; isEmail && len(spec.Key) == 1 && spec.Unique && !spec.Sparse {
+			_ = coll.Indexes().DropOne(ctx, spec.Name)
+		}
+	}
+}
+
 func (s *StoreDB) EnsureIndexes(ctx context.Context) error {
 	// users
+	s.dropLegacyEmailIndex(ctx)
 	if _, err := s.DB.Collection("users").Indexes().CreateMany(ctx, []mongo.IndexModel{
-		{Keys: bson.D{{Key: "email", Value: 1}}, Options: options.Index().SetUnique(true)},
+		{Keys: bson.D{{Key: "email", Value: 1}}, Options: options.Index().SetUnique(true).SetSparse(true)},
+		{Keys: bson.D{{Key: "phone", Value: 1}}},
 		{Keys: bson.D{{Key: "role", Value: 1}}},
 	}); err != nil {
 		return err

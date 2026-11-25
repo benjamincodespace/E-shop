@@ -49,6 +49,19 @@ func (r *UserRepository) FindByEmail(ctx context.Context, email string) (*models
 	return &u, nil
 }
 
+func (r *UserRepository) FindByPhone(ctx context.Context, phone string) (*models.User, error) {
+	var u models.User
+	err := r.store.DB.Collection("users").FindOne(ctx, bson.M{"phone": phone}).Decode(&u)
+	if errors.Is(err, mongo.ErrNoDocuments) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	u.HydrateIDs()
+	return &u, nil
+}
+
 func (r *UserRepository) FindByID(ctx context.Context, idHex string) (*models.User, error) {
 	oid, err := bson.ObjectIDFromHex(idHex)
 	if err != nil {

@@ -108,9 +108,9 @@ interface StoreContextValue {
   loginUser: (email: string, password: string, portal?: 'customer' | 'admin') => Promise<User>;
   registerUser: (payload: {
     name: string;
-    email: string;
+    phone: string;
     password: string;
-    phone?: string;
+    email?: string;
     address?: string;
   }) => Promise<User>;
   claimAdminAccount: (payload: {
@@ -432,7 +432,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   );
 
   const registerUser = useCallback(
-    async (payload: { name: string; email: string; password: string; phone?: string; address?: string }) => {
+    async (payload: { name: string; phone: string; password: string; email?: string; address?: string }) => {
       const guestCart = [...cart];
       const guestWishlist = [...wishlistIds];
       const res = await api.register(payload);

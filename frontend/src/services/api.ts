@@ -115,11 +115,12 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(payload),
     }),
-  register: (payload: { name: string; email: string; password: string; phone?: string; address?: string }) =>
+  register: (payload: { name: string; phone: string; password: string; email?: string; address?: string }) =>
     apiRequest<{ user: User; token: string; purchasedProductIds: string[] }>('/api/auth/register', {
       method: 'POST',
       body: JSON.stringify(payload),
     }),
+  // `email` accepts either an email address or a phone number.
   login: (payload: { email: string; password: string; portal?: 'customer' | 'admin' }) =>
     apiRequest<{ user: User; token: string; purchasedProductIds: string[] }>('/api/auth/login', {
       method: 'POST',
@@ -134,6 +135,7 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify(payload),
     }),
+  // `email` accepts either an email address or a phone number.
   forgotPassword: (email: string) =>
     apiRequest<{ message: string; previewResetCode?: string }>('/api/auth/forgot-password', {
       method: 'POST',

@@ -93,10 +93,12 @@ export const StorefrontHome: React.FC<StorefrontHomeProps> = ({
   })();
 
   return (
-    <div className="max-w-[1440px] mx-auto px-4 sm:px-6 py-5 sm:py-6">
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+    // On desktop the page under the header is a fixed frame: the left rail and
+    // the product panel stay put and only the product column scrolls.
+    <div className="max-w-[1440px] mx-auto px-4 sm:px-6 py-5 sm:py-6 lg:h-[calc(100dvh-4rem)] lg:overflow-hidden">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start lg:h-full lg:items-stretch">
         {/* Left Navigation Sidebar */}
-        <aside className="hidden lg:flex lg:col-span-2 flex-col gap-5 sticky top-20">
+        <aside className="hidden lg:flex lg:col-span-2 flex-col gap-5 lg:h-full lg:min-h-0 lg:overflow-y-auto lg:overscroll-contain">
           <nav aria-label="Store sections" className="space-y-1.5">
             <button
               type="button"
@@ -163,7 +165,7 @@ export const StorefrontHome: React.FC<StorefrontHomeProps> = ({
         </aside>
 
         {/* Center Storefront Content */}
-        <section className="lg:col-span-6 space-y-6">
+        <section className="lg:col-span-6 space-y-6 lg:h-full lg:min-h-0 lg:overflow-y-auto lg:pb-6 lg:pr-1.5">
           {/* Hero Promotional Banner */}
           <div className="relative rounded-3xl overflow-hidden bg-neutral-100 border border-neutral-200/70 min-h-[220px] sm:min-h-[260px] flex items-center">
             <SafeImage
@@ -351,8 +353,8 @@ export const StorefrontHome: React.FC<StorefrontHomeProps> = ({
           )}
         </section>
 
-        {/* Right Sticky Product Details Panel */}
-        <div className="hidden lg:block lg:col-span-4">
+        {/* Right Product Details Panel */}
+        <div className="hidden lg:block lg:col-span-4 lg:h-full lg:min-h-0 lg:overflow-y-auto lg:overscroll-contain">
           <ProductQuickPanel product={selectedProduct || products[0] || null} />
         </div>
       </div>

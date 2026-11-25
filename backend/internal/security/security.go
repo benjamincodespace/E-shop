@@ -188,8 +188,9 @@ type bucket struct {
 }
 
 type RateLimiter struct {
-	mu      sync.Mutex
-	buckets map[string]*bucket
+	mu        sync.Mutex
+	buckets   map[string]*bucket
+	lastSweep time.Time
 }
 
 func NewRateLimiter() *RateLimiter {
@@ -201,6 +202,16 @@ func (rl *RateLimiter) Allow(key string, limit int, window time.Duration) bool {
 	defer rl.mu.Unlock()
 
 	now := time.Now()
+	// Drop expired buckets periodically so a long-lived server does not grow
+	// one entry per client IP and path forever.
+	if now.Sub(rl.lastSweep) > time.Minute {
+		for k, v := range rl.buckets {
+			if !now.Before(v.resetAt) {
+				delete(rl.buckets, k)
+			}
+		}
+		rl.lastSweep = now
+	}
 	b, ok := rl.buckets[key]
 	if !ok || !now.Before(b.resetAt) {
 		rl.buckets[key] = &bucket{count: 1, resetAt: now.Add(window)}

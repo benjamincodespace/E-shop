@@ -1230,7 +1230,7 @@ export const AdminDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }
                             {c.disabled && <span className="text-xs text-neutral-500 font-normal">(Disabled)</span>}
                           </p>
                           <p className="text-xs text-neutral-500 truncate">
-                            {c.email} · {c.orderCount} orders · ${c.totalSpent.toFixed(2)} spent
+                            {c.email || c.phone} · {c.orderCount} orders · ${c.totalSpent.toFixed(2)} spent
                           </p>
                         </div>
                       </div>
@@ -1483,7 +1483,9 @@ export const AdminDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }
                 <h3 className="font-display text-base font-bold text-neutral-950">
                   {selectedCustomerOrders.customer.name}
                 </h3>
-                <p className="text-xs text-neutral-500">{selectedCustomerOrders.customer.email}</p>
+                <p className="text-xs text-neutral-500">
+                  {selectedCustomerOrders.customer.email || selectedCustomerOrders.customer.phone}
+                </p>
               </div>
               <button
                 type="button"

@@ -79,7 +79,7 @@ export const ProductQuickPanel: React.FC<ProductQuickPanelProps> = ({ product })
   };
 
   return (
-    <aside className="bg-white border border-neutral-200/80 rounded-2xl p-5 shadow-[0_4px_20px_rgba(0,0,0,0.03)] sticky top-20">
+    <aside className="bg-white border border-neutral-200/80 rounded-2xl p-5 shadow-[0_4px_20px_rgba(0,0,0,0.03)]">
       <div className="flex flex-col sm:flex-row xl:flex-row gap-4">
         <button
           type="button"

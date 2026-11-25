@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"crypto/rand"
 	"fmt"
 	"math/big"
@@ -22,6 +23,49 @@ type AuthHandler struct {
 
 func NewAuthHandler(cfg *config.Config, userRepo *repositories.UserRepository) *AuthHandler {
 	return &AuthHandler{cfg: cfg, userRepo: userRepo}
+}
+
+// normalizePhone keeps a leading "+" and digits so numbers are stored and
+// compared in one E.164-like format regardless of spaces or dashes.
+func normalizePhone(raw string) string {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return ""
+	}
+	var b strings.Builder
+	if strings.HasPrefix(trimmed, "+") {
+		b.WriteByte('+')
+	}
+	for _, r := range trimmed {
+		if r >= '0' && r <= '9' {
+			b.WriteRune(r)
+		}
+	}
+	normalized := b.String()
+	if len(normalized) <= 1 {
+		return ""
+	}
+	return normalized
+}
+
+func validPhone(phone string) bool {
+	if !strings.HasPrefix(phone, "+") {
+		return false
+	}
+	digits := len(phone) - 1
+	return digits >= 7 && digits <= 15
+}
+
+// findByIdentifier resolves a sign-in/reset identifier that may be an email or a phone.
+func (h *AuthHandler) findByIdentifier(ctx context.Context, identifier string) (*models.User, error) {
+	if strings.Contains(identifier, "@") {
+		return h.userRepo.FindByEmail(ctx, strings.ToLower(strings.TrimSpace(identifier)))
+	}
+	phone := normalizePhone(identifier)
+	if phone == "" {
+		return nil, nil
+	}
+	return h.userRepo.FindByPhone(ctx, phone)
 }
 
 func (h *AuthHandler) signSessionCookies(w http.ResponseWriter, r *http.Request, user *models.User) (string, bool) {
@@ -165,12 +209,21 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 
 	name := strings.TrimSpace(body.Name)
 	email := strings.ToLower(strings.TrimSpace(body.Email))
+	phone := normalizePhone(body.Phone)
 	if len(name) < 2 {
 		WriteError(w, http.StatusBadRequest, "Name must be at least 2 characters.")
 		return
 	}
-	if !strings.Contains(email, "@") {
+	if email != "" && !strings.Contains(email, "@") {
 		WriteError(w, http.StatusBadRequest, "Please enter a valid email address.")
+		return
+	}
+	if phone == "" {
+		WriteError(w, http.StatusBadRequest, "Phone number is required.")
+		return
+	}
+	if !validPhone(phone) {
+		WriteError(w, http.StatusBadRequest, "Please enter a valid phone number including the country code.")
 		return
 	}
 	if len(body.Password) < 6 {
@@ -178,9 +231,14 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	existing, _ := h.userRepo.FindByEmail(r.Context(), email)
-	if existing != nil {
-		WriteError(w, http.StatusConflict, "An account with this email already exists.")
+	if email != "" {
+		if existing, _ := h.userRepo.FindByEmail(r.Context(), email); existing != nil {
+			WriteError(w, http.StatusConflict, "An account with this email already exists.")
+			return
+		}
+	}
+	if existing, _ := h.userRepo.FindByPhone(r.Context(), phone); existing != nil {
+		WriteError(w, http.StatusConflict, "An account with this phone number already exists.")
 		return
 	}
 
@@ -194,7 +252,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		Name:         name,
 		Email:        email,
 		PasswordHash: hash,
-		Phone:        strings.TrimSpace(body.Phone),
+		Phone:        phone,
 		Address:      strings.TrimSpace(body.Address),
 		Role:         models.RoleCustomer,
 	}
@@ -217,17 +275,18 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	email := strings.ToLower(strings.TrimSpace(body.Email))
+	identifier := strings.TrimSpace(body.Email)
+	email := strings.ToLower(identifier)
 	portal := "customer"
 	if body.Portal == "admin" {
 		portal = "admin"
 	}
-	if email == "" || body.Password == "" {
-		WriteError(w, http.StatusBadRequest, "Email and password are required.")
+	if identifier == "" || body.Password == "" {
+		WriteError(w, http.StatusBadRequest, "Email or phone number and password are required.")
 		return
 	}
 
-	user, err := h.userRepo.FindByEmail(r.Context(), email)
+	user, err := h.findByIdentifier(r.Context(), identifier)
 	if err != nil {
 		WriteError(w, http.StatusInternalServerError, "Sign-in lookup failed.")
 		return
@@ -261,7 +320,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if user == nil || !security.VerifyPassword(body.Password, user.PasswordHash) {
-		WriteError(w, http.StatusUnauthorized, "Invalid email or password.")
+		WriteError(w, http.StatusUnauthorized, "Invalid email/phone or password.")
 		return
 	}
 	if user.Disabled {
@@ -384,7 +443,17 @@ func (h *AuthHandler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 		WriteError(w, http.StatusBadRequest, "Name must be at least 2 characters.")
 		return
 	}
-	user, err := h.userRepo.UpdateProfile(r.Context(), claims.Sub, name, strings.TrimSpace(body.Phone), strings.TrimSpace(body.Address))
+	phone := normalizePhone(body.Phone)
+	if phone != "" {
+		if other, _ := h.userRepo.FindByPhone(r.Context(), phone); other != nil && other.IDHex != claims.Sub {
+			WriteError(w, http.StatusConflict, "This phone number is already linked to another account.")
+			return
+		}
+	} else if strings.TrimSpace(body.Phone) != "" {
+		WriteError(w, http.StatusBadRequest, "Please enter a valid phone number including the country code.")
+		return
+	}
+	user, err := h.userRepo.UpdateProfile(r.Context(), claims.Sub, name, phone, strings.TrimSpace(body.Address))
 	if err != nil {
 		WriteError(w, http.StatusInternalServerError, "Failed to update profile.")
 		return
@@ -400,16 +469,16 @@ func (h *AuthHandler) ForgotPassword(w http.ResponseWriter, r *http.Request) {
 		WriteError(w, http.StatusBadRequest, "Invalid request.")
 		return
 	}
-	email := strings.ToLower(strings.TrimSpace(body.Email))
-	if !strings.Contains(email, "@") {
-		WriteError(w, http.StatusBadRequest, "Please provide a valid email address.")
+	identifier := strings.TrimSpace(body.Email)
+	if identifier == "" {
+		WriteError(w, http.StatusBadRequest, "Please provide your email address or phone number.")
 		return
 	}
 
-	user, _ := h.userRepo.FindByEmail(r.Context(), email)
+	user, _ := h.findByIdentifier(r.Context(), identifier)
 	if user == nil || user.Role != models.RoleCustomer {
 		WriteJSON(w, http.StatusOK, map[string]string{
-			"message": "If an account matches that email, a password reset code has been generated.",
+			"message": "If an account matches those details, a password reset code has been generated.",
 		})
 		return
 	}
@@ -437,14 +506,14 @@ func (h *AuthHandler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 		WriteError(w, http.StatusBadRequest, "Invalid request.")
 		return
 	}
-	email := strings.ToLower(strings.TrimSpace(body.Email))
+	identifier := strings.TrimSpace(body.Email)
 	code := strings.TrimSpace(body.Code)
-	if email == "" || code == "" || len(body.NewPassword) < 6 {
-		WriteError(w, http.StatusBadRequest, "Email, 6-digit code, and a new password (6+ characters) are required.")
+	if identifier == "" || code == "" || len(body.NewPassword) < 6 {
+		WriteError(w, http.StatusBadRequest, "Email or phone number, 6-digit code, and a new password (6+ characters) are required.")
 		return
 	}
 
-	user, _ := h.userRepo.FindByEmail(r.Context(), email)
+	user, _ := h.findByIdentifier(r.Context(), identifier)
 	if user == nil || user.ResetCode == "" || user.ResetCode != code {
 		WriteError(w, http.StatusBadRequest, "Invalid reset code.")
 		return

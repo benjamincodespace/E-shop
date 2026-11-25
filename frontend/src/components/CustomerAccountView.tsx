@@ -5,6 +5,7 @@ import { Heart, LogOut, Package, Star, Trash2, User as UserIcon } from 'lucide-r
 import { useStore } from '@/context/StoreContext';
 import { api } from '@/services/api';
 import type { Order, Review } from '@/types/store';
+import { COUNTRIES, detectCountryCode, findCountry, flagEmoji, isValidPhoneDigits, toE164 } from '@/lib/countries';
 import { ProductCard } from './ProductCard';
 import { SafeImage } from './SafeImage';
 
@@ -59,6 +60,7 @@ export const AuthView: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [phone, setPhone] = useState('');
+  const [phoneCountry, setPhoneCountry] = useState('US');
   const [address, setAddress] = useState('');
   const [resetCode, setResetCode] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -75,6 +77,11 @@ export const AuthView: React.FC = () => {
     }
   }, [user, navigate]);
 
+  // Detect the visitor's country after mount so server and client markup match.
+  useEffect(() => {
+    setPhoneCountry(detectCountryCode());
+  }, []);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -85,7 +92,16 @@ export const AuthView: React.FC = () => {
         notify(`Welcome back, ${loggedIn.name}!`, 'success');
         navigate({ page: loggedIn.role === 'admin' ? 'admin' : 'home' });
       } else if (mode === 'register') {
-        const created = await registerUser({ name, email, password, phone, address });
+        if (!isValidPhoneDigits(phone)) {
+          notify('Enter a valid phone number for the selected country.', 'error');
+          return;
+        }
+        const created = await registerUser({
+          name,
+          phone: toE164(findCountry(phoneCountry).dial, phone),
+          password,
+          address,
+        });
         notify(`Welcome to TeeStore, ${created.name}!`, 'success');
         navigate({ page: 'home' });
       } else if (mode === 'forgot') {
@@ -165,20 +181,23 @@ export const AuthView: React.FC = () => {
             </div>
           )}
 
-          <div>
-            <label htmlFor="auth-email" className="block text-xs font-semibold text-neutral-800 mb-1">
-              Email Address
-            </label>
-            <input
-              id="auth-email"
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com"
-              className="w-full rounded-xl border border-neutral-200 px-3.5 py-2.5 text-sm focus:outline-none focus:border-neutral-950"
-            />
-          </div>
+          {mode !== 'register' && (
+            <div>
+              <label htmlFor="auth-email" className="block text-xs font-semibold text-neutral-800 mb-1">
+                Email or Phone Number
+              </label>
+              <input
+                id="auth-email"
+                type="text"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com or +1 555 010 0100"
+                autoComplete="username"
+                className="w-full rounded-xl border border-neutral-200 px-3.5 py-2.5 text-sm focus:outline-none focus:border-neutral-950"
+              />
+            </div>
+          )}
 
           {mode !== 'forgot' && (
             <div>
@@ -202,16 +221,35 @@ export const AuthView: React.FC = () => {
             <>
               <div>
                 <label htmlFor="auth-phone" className="block text-xs font-semibold text-neutral-800 mb-1">
-                  Phone Number (Optional)
+                  Phone Number
                 </label>
-                <input
-                  id="auth-phone"
-                  type="tel"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  placeholder="+1 415 555 0100"
-                  className="w-full rounded-xl border border-neutral-200 px-3.5 py-2.5 text-sm focus:outline-none focus:border-neutral-950"
-                />
+                <div className="flex gap-2">
+                  <select
+                    aria-label="Country calling code"
+                    value={phoneCountry}
+                    onChange={(e) => setPhoneCountry(e.target.value)}
+                    className="w-[10.5rem] shrink-0 rounded-xl border border-neutral-200 bg-white px-2.5 py-2.5 text-sm focus:outline-none focus:border-neutral-950 cursor-pointer"
+                  >
+                    {COUNTRIES.map((c) => (
+                      <option key={c.code} value={c.code}>
+                        +{c.dial} {flagEmoji(c.code)} {c.name}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    id="auth-phone"
+                    type="tel"
+                    required
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    placeholder="555 010 0100"
+                    autoComplete="tel-national"
+                    className="flex-1 min-w-0 rounded-xl border border-neutral-200 px-3.5 py-2.5 text-sm focus:outline-none focus:border-neutral-950"
+                  />
+                </div>
+                <p className="mt-1.5 text-[11px] text-neutral-500">
+                  Your number +{findCountry(phoneCountry).dial} will be your sign-in ID.
+                </p>
               </div>
               <div>
                 <label htmlFor="auth-address" className="block text-xs font-semibold text-neutral-800 mb-1">
@@ -373,7 +411,7 @@ export const CustomerAccountView: React.FC<{ initialTab?: 'profile' | 'orders' |
           </div>
           <div>
             <h1 className="font-display text-xl font-bold text-neutral-950">{user.name}</h1>
-            <p className="text-xs text-neutral-500">{user.email}</p>
+            <p className="text-xs text-neutral-500">{user.email || user.phone}</p>
           </div>
         </div>
 

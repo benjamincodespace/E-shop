@@ -42,7 +42,7 @@ type User struct {
 	ID             bson.ObjectID `bson:"_id,omitempty" json:"-"`
 	IDHex          string        `bson:"-" json:"id"`
 	Name           string        `bson:"name" json:"name"`
-	Email          string        `bson:"email" json:"email"`
+	Email          string        `bson:"email,omitempty" json:"email"`
 	PasswordHash   string        `bson:"passwordHash" json:"-"`
 	Phone          string        `bson:"phone" json:"phone"`
 	Address        string        `bson:"address" json:"address"`
