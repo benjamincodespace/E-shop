@@ -1,0 +1,737 @@
+'use client';
+
+import React, { useCallback, useEffect, useState } from 'react';
+import {
+  ArrowLeft,
+  Check,
+  Edit3,
+  Heart,
+  Minus,
+  Plus,
+  Share2,
+  ShieldCheck,
+  ShoppingCart,
+  Star,
+  ThumbsUp,
+  Trash2,
+} from 'lucide-react';
+import type { Product, Review, TeeSize } from '@/types/store';
+import { api } from '@/services/api';
+import { calculateDiscountPercent, getEffectivePrice, getStockBadgeInfo } from '@/lib/storeLogic';
+import { useStore } from '@/context/StoreContext';
+import { SafeImage } from './SafeImage';
+
+interface RatingSummary {
+  average: number;
+  total: number;
+  breakdown: Array<{ stars: number; count: number; percentage: number }>;
+}
+
+interface ProductDetailViewProps {
+  slug: string;
+  initialProduct?: Product | null;
+  initialReviews?: Review[];
+  initialRatingSummary?: RatingSummary;
+}
+
+export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
+  slug,
+  initialProduct = null,
+  initialReviews = [],
+  initialRatingSummary = { average: 0, total: 0, breakdown: [] },
+}) => {
+  const { addToCart, toggleWishlist, wishlistIds, navigate, user, purchasedProductIds, notify, refreshCatalog } =
+    useStore();
+
+  const [product, setProduct] = useState<Product | null>(initialProduct);
+  const [reviews, setReviews] = useState<Review[]>(initialReviews);
+  const [ratingSummary, setRatingSummary] = useState<RatingSummary>(initialRatingSummary);
+  const [loading, setLoading] = useState(!initialProduct);
+  const [error, setError] = useState('');
+
+  const [activeImageIdx, setActiveImageIdx] = useState(0);
+  const [selectedSize, setSelectedSize] = useState<TeeSize>(
+    initialProduct?.sizes.includes('M') ? 'M' : initialProduct?.sizes[0] || 'M',
+  );
+  const [selectedColor, setSelectedColor] = useState<string>(initialProduct?.colors[0]?.name || 'Black');
+  const [quantity, setQuantity] = useState(1);
+  const [activeTab, setActiveTab] = useState<'description' | 'reviews' | 'shipping'>('reviews');
+
+  // Review composer & editing
+  const [ratingInput, setRatingInput] = useState(5);
+  const [commentInput, setCommentInput] = useState('');
+  const [submittingReview, setSubmittingReview] = useState(false);
+  const [editingReviewId, setEditingReviewId] = useState<string | null>(null);
+  const [editRating, setEditRating] = useState(5);
+  const [editComment, setEditComment] = useState('');
+
+  const loadProduct = useCallback(async (background = false) => {
+    if (!background) setLoading(true);
+    setError('');
+    try {
+      const res = await api.getProductBySlug(slug);
+      setProduct(res.product);
+      setReviews(res.reviews);
+      setRatingSummary(res.ratingSummary);
+      setSelectedSize(res.product.sizes.includes('M') ? 'M' : res.product.sizes[0] || 'M');
+      setSelectedColor(res.product.colors[0]?.name || 'Black');
+      setActiveImageIdx(0);
+      setQuantity(1);
+    } catch (err) {
+      if (!background) {
+        setError(err instanceof Error ? err.message : 'Unable to load product.');
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [slug]);
+
+  useEffect(() => {
+    loadProduct(Boolean(initialProduct));
+  }, [loadProduct, initialProduct]);
+
+  if (loading) {
+    return (
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8 animate-pulse">
+        <div className="h-6 w-44 bg-neutral-100 rounded mb-6" />
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+          <div className="lg:col-span-7 aspect-square bg-neutral-100 rounded-2xl" />
+          <div className="lg:col-span-5 space-y-4">
+            <div className="h-8 w-2/3 bg-neutral-100 rounded" />
+            <div className="h-6 w-1/3 bg-neutral-100 rounded" />
+            <div className="h-24 w-full bg-neutral-100 rounded" />
+            <div className="h-12 w-full bg-neutral-100 rounded-full" />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !product) {
+    return (
+      <div className="max-w-3xl mx-auto px-4 py-16 text-center">
+        <h1 className="font-display text-2xl font-bold text-neutral-950">T-Shirt Not Found</h1>
+        <p className="mt-2 text-sm text-neutral-500">{error || 'This product may have been archived.'}</p>
+        <button
+          type="button"
+          onClick={() => navigate({ page: 'catalog' })}
+          className="mt-6 px-6 py-2.5 rounded-full bg-neutral-950 text-white text-xs font-semibold cursor-pointer"
+        >
+          Browse All T-Shirts
+        </button>
+      </div>
+    );
+  }
+
+  const effectivePrice = getEffectivePrice(product);
+  const discountPct = calculateDiscountPercent(product.price, product.discountPrice);
+  const isFav = wishlistIds.includes(product.id);
+  const stockInfo = getStockBadgeInfo(product.stock);
+  const outOfStock = product.stock <= 0;
+  const hasPurchased = Boolean(user && purchasedProductIds.includes(product.id));
+  const alreadyReviewed = Boolean(user && reviews.some((r) => r.userId === user.id));
+
+  const handleShare = async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      notify('Product link copied to clipboard', 'success');
+    } catch {
+      notify('Share link ready in browser address bar', 'info');
+    }
+  };
+
+  const handleReviewSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user) {
+      navigate({ page: 'auth' });
+      return;
+    }
+    setSubmittingReview(true);
+    try {
+      await api.submitReview(product.id, { rating: ratingInput, comment: commentInput.trim() });
+      setCommentInput('');
+      notify('Thank you! Your verified review has been published.', 'success');
+      await Promise.all([loadProduct(true), refreshCatalog()]);
+    } catch (err) {
+      notify(err instanceof Error ? err.message : 'Unable to submit review.', 'error');
+    } finally {
+      setSubmittingReview(false);
+    }
+  };
+
+  const handleSaveEdit = async (reviewId: string) => {
+    try {
+      await api.updateReview(reviewId, { rating: editRating, comment: editComment.trim() });
+      setEditingReviewId(null);
+      notify('Review updated', 'success');
+      await Promise.all([loadProduct(true), refreshCatalog()]);
+    } catch (err) {
+      notify(err instanceof Error ? err.message : 'Could not update review.', 'error');
+    }
+  };
+
+  const handleDeleteReview = async (reviewId: string) => {
+    try {
+      await api.deleteReview(reviewId);
+      notify('Review deleted', 'info');
+      await Promise.all([loadProduct(true), refreshCatalog()]);
+    } catch (err) {
+      notify(err instanceof Error ? err.message : 'Could not delete review.', 'error');
+    }
+  };
+
+  const handleLikeReview = async (reviewId: string) => {
+    if (!user) {
+      notify('Sign in to mark reviews as helpful.', 'info');
+      return;
+    }
+    try {
+      const res = await api.toggleReviewLike(reviewId);
+      setReviews((prev) =>
+        prev.map((r) =>
+          r.id === reviewId ? { ...r, userHasLiked: res.liked, helpfulCount: res.helpfulCount } : r,
+        ),
+      );
+    } catch (err) {
+      notify(err instanceof Error ? err.message : 'Failed to update vote.', 'error');
+    }
+  };
+
+  return (
+    <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
+      {/* Breadcrumb & Mobile Back Header */}
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-2 text-xs text-neutral-500">
+          <button
+            type="button"
+            onClick={() => navigate({ page: 'catalog' })}
+            className="inline-flex items-center gap-1.5 text-neutral-700 hover:text-neutral-950 font-medium cursor-pointer"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span>Back to Catalog</span>
+          </button>
+          <span aria-hidden="true">/</span>
+          <button
+            type="button"
+            onClick={() => navigate({ page: 'catalog', category: product.categorySlug })}
+            className="hover:text-neutral-950 cursor-pointer"
+          >
+            {product.categoryName}
+          </button>
+        </div>
+
+        <button
+          type="button"
+          onClick={handleShare}
+          aria-label="Share product"
+          className="w-9 h-9 rounded-full border border-neutral-200 flex items-center justify-center text-neutral-700 hover:border-neutral-950 cursor-pointer"
+        >
+          <Share2 className="w-4 h-4" />
+        </button>
+      </div>
+
+      {/* Main Split Module */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+        {/* Left Gallery */}
+        <div className="lg:col-span-7 flex flex-col-reverse sm:flex-row gap-3.5">
+          {product.images.length > 1 && (
+            <div className="flex sm:flex-col gap-2.5 overflow-x-auto sm:w-20 shrink-0">
+              {product.images.map((img, idx) => (
+                <button
+                  key={`${img}-${idx}`}
+                  type="button"
+                  onClick={() => setActiveImageIdx(idx)}
+                  aria-label={`View image ${idx + 1}`}
+                  className={`w-16 h-16 sm:w-20 sm:h-20 rounded-xl bg-neutral-100 overflow-hidden border-2 shrink-0 cursor-pointer transition-colors ${
+                    activeImageIdx === idx ? 'border-neutral-950' : 'border-transparent hover:border-neutral-300'
+                  }`}
+                >
+                  <SafeImage src={img} alt={`${product.name} angle ${idx + 1}`} className="w-full h-full object-cover" />
+                </button>
+              ))}
+            </div>
+          )}
+
+          <div className="flex-1 bg-neutral-100 rounded-2xl overflow-hidden relative aspect-square">
+            <SafeImage
+              src={product.images[activeImageIdx] || product.images[0]}
+              alt={product.name}
+              eager
+              className="w-full h-full object-cover"
+            />
+            {product.images.length > 1 && (
+              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-1.5 glass-surface px-2.5 py-1.5 rounded-full">
+                {product.images.map((_, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    aria-label={`Slide ${idx + 1}`}
+                    onClick={() => setActiveImageIdx(idx)}
+                    className={`h-1.5 rounded-full transition-all cursor-pointer ${
+                      activeImageIdx === idx ? 'w-5 bg-neutral-950' : 'w-1.5 bg-neutral-400'
+                    }`}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Right Purchase Module */}
+        <div className="lg:col-span-5 bg-white border border-neutral-200/80 rounded-2xl p-6 shadow-[0_4px_20px_rgba(0,0,0,0.03)]">
+          <div className="flex items-center gap-2 text-xs text-neutral-500">
+            <span>{product.categoryName}</span>
+            <span aria-hidden="true">·</span>
+            <span
+              className={
+                stockInfo.tone === 'in'
+                  ? 'text-neutral-800 font-medium'
+                  : stockInfo.tone === 'low'
+                    ? 'text-amber-700 font-semibold'
+                    : 'text-neutral-500 font-semibold'
+              }
+            >
+              {stockInfo.label} ({product.stock} left)
+            </span>
+          </div>
+
+          <h1 className="mt-1.5 font-display text-2xl sm:text-3xl font-bold text-neutral-950 tracking-tight">
+            {product.name}
+          </h1>
+
+          <div className="mt-2.5 flex items-center gap-1.5 text-xs">
+            <div className="flex items-center gap-0.5" aria-hidden="true">
+              {[1, 2, 3, 4, 5].map((s) => (
+                <Star
+                  key={s}
+                  className={`w-3.5 h-3.5 ${
+                    s <= Math.round(ratingSummary.average || product.ratingAvg || 5)
+                      ? 'fill-neutral-950 text-neutral-950'
+                      : 'text-neutral-300'
+                  }`}
+                />
+              ))}
+            </div>
+            <span className="font-semibold text-neutral-950 tabular-nums">
+              {ratingSummary.average > 0 ? ratingSummary.average.toFixed(1) : 'New'}
+            </span>
+            <span className="text-neutral-500 tabular-nums">({ratingSummary.total} reviews)</span>
+          </div>
+
+          <div className="mt-4 flex items-center gap-3">
+            <span className="font-mono-num text-2xl font-bold text-neutral-950">
+              ${effectivePrice.toFixed(2)}
+            </span>
+            {discountPct > 0 && (
+              <>
+                <span className="font-mono-num text-sm text-neutral-400 line-through">
+                  ${product.price.toFixed(2)}
+                </span>
+                <span className="px-2.5 py-0.5 rounded-full bg-neutral-950 text-white text-xs font-semibold">
+                  {discountPct}% OFF
+                </span>
+              </>
+            )}
+          </div>
+
+          <p className="mt-4 text-sm text-neutral-600 leading-relaxed">{product.description}</p>
+
+          {/* Size selector */}
+          <div className="mt-6">
+            <span className="block text-xs font-semibold text-neutral-900 mb-2">Size</span>
+            <div className="flex flex-wrap gap-2">
+              {product.sizes.map((sz) => (
+                <button
+                  key={sz}
+                  type="button"
+                  onClick={() => setSelectedSize(sz)}
+                  className={`min-w-[46px] px-3.5 py-2 rounded-full text-xs font-semibold border transition-colors cursor-pointer ${
+                    selectedSize === sz
+                      ? 'bg-neutral-950 text-white border-neutral-950'
+                      : 'bg-white text-neutral-700 border-neutral-200 hover:border-neutral-400'
+                  }`}
+                >
+                  {sz}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Color selector */}
+          <div className="mt-5">
+            <span className="block text-xs font-semibold text-neutral-900 mb-2">
+              Color: <span className="font-normal text-neutral-600">{selectedColor}</span>
+            </span>
+            <div className="flex items-center gap-2.5">
+              {product.colors.map((c) => (
+                <button
+                  key={c.name}
+                  type="button"
+                  onClick={() => setSelectedColor(c.name)}
+                  aria-label={`Color ${c.name}`}
+                  className={`w-7 h-7 rounded-full border transition-transform cursor-pointer ${
+                    selectedColor === c.name
+                      ? 'ring-2 ring-neutral-950 ring-offset-2 scale-105'
+                      : 'border-neutral-300'
+                  }`}
+                  style={{ backgroundColor: c.hex }}
+                />
+              ))}
+            </div>
+          </div>
+
+          {/* Quantity + CTA */}
+          <div className="mt-6 flex items-center gap-3">
+            <div className="inline-flex items-center border border-neutral-200 rounded-full px-1.5 py-1">
+              <button
+                type="button"
+                onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+                aria-label="Decrease quantity"
+                className="w-8 h-8 rounded-full flex items-center justify-center text-neutral-700 hover:bg-neutral-100 cursor-pointer"
+              >
+                <Minus className="w-3.5 h-3.5" />
+              </button>
+              <span className="w-9 text-center text-sm font-semibold tabular-nums">{quantity}</span>
+              <button
+                type="button"
+                onClick={() => setQuantity((q) => Math.min(Math.max(1, product.stock), q + 1))}
+                aria-label="Increase quantity"
+                className="w-8 h-8 rounded-full flex items-center justify-center text-neutral-700 hover:bg-neutral-100 cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            <button
+              type="button"
+              disabled={outOfStock}
+              onClick={() => addToCart(product, selectedSize, selectedColor, quantity)}
+              className={`flex-1 py-3.5 px-6 rounded-full text-xs font-semibold inline-flex items-center justify-center gap-2 whitespace-nowrap transition-colors ${
+                outOfStock
+                  ? 'bg-neutral-200 text-neutral-500 cursor-not-allowed'
+                  : 'bg-neutral-950 text-white hover:bg-neutral-800 cursor-pointer'
+              }`}
+            >
+              <ShoppingCart className="w-4 h-4" />
+              <span>{outOfStock ? 'Out of Stock' : 'Add to Cart'}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => toggleWishlist(product)}
+              aria-label={isFav ? 'Remove from favorites' : 'Add to favorites'}
+              className="w-12 h-12 rounded-full border border-neutral-200 flex items-center justify-center text-neutral-800 hover:border-neutral-950 transition-colors cursor-pointer shrink-0"
+            >
+              <Heart className={`w-4 h-4 ${isFav ? 'fill-neutral-950 text-neutral-950' : ''}`} />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="mt-10 border-t border-neutral-200 pt-6">
+        <div className="flex items-center gap-6 border-b border-neutral-200 pb-3 overflow-x-auto">
+          {(
+            [
+              { id: 'description', label: 'Description' },
+              { id: 'reviews', label: `Reviews (${ratingSummary.total})` },
+              { id: 'shipping', label: 'Shipping & Returns' },
+            ] as const
+          ).map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => setActiveTab(t.id)}
+              className={`text-sm font-semibold whitespace-nowrap pb-1 border-b-2 transition-colors cursor-pointer ${
+                activeTab === t.id
+                  ? 'border-neutral-950 text-neutral-950'
+                  : 'border-transparent text-neutral-500 hover:text-neutral-900'
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        {activeTab === 'description' && (
+          <div className="py-6 max-w-3xl space-y-3 text-sm text-neutral-600 leading-relaxed">
+            <p>{product.description}</p>
+            <ul className="list-disc pl-5 space-y-1.5 text-neutral-700">
+              <li>100% combed ring-spun cotton jersey crafted for structured drape.</li>
+              <li>Pre-shrunk wash finish with double-needle sleeve and bottom hems.</li>
+              <li>Available sizes: {product.sizes.join(', ')}.</li>
+            </ul>
+          </div>
+        )}
+
+        {activeTab === 'shipping' && (
+          <div className="py-6 max-w-3xl space-y-3 text-sm text-neutral-600 leading-relaxed">
+            <p>
+              <strong>Free Shipping</strong> on all orders over $50.00. Standard flat-rate delivery ($6.00)
+              arrives within 2–4 business days.
+            </p>
+            <p>
+              <strong>Easy 7-Day Returns:</strong> Unworn T-shirts in original condition may be returned or
+              exchanged within 7 days of delivery.
+            </p>
+          </div>
+        )}
+
+        {activeTab === 'reviews' && (
+          <div className="py-6 grid grid-cols-1 lg:grid-cols-12 gap-8">
+            {/* Rating Breakdown */}
+            <div className="lg:col-span-4 bg-neutral-50 border border-neutral-200/80 rounded-2xl p-6 h-fit">
+              <div className="flex items-end gap-3">
+                <span className="font-display text-5xl font-bold text-neutral-950 tabular-nums leading-none">
+                  {ratingSummary.average > 0 ? ratingSummary.average.toFixed(1) : '0.0'}
+                </span>
+                <div>
+                  <div className="flex items-center gap-0.5">
+                    {[1, 2, 3, 4, 5].map((s) => (
+                      <Star
+                        key={s}
+                        className={`w-4 h-4 ${
+                          s <= Math.round(ratingSummary.average)
+                            ? 'fill-neutral-950 text-neutral-950'
+                            : 'text-neutral-300'
+                        }`}
+                      />
+                    ))}
+                  </div>
+                  <p className="text-xs text-neutral-500 mt-1 tabular-nums">
+                    ({ratingSummary.total} verified reviews)
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-5 space-y-2">
+                {ratingSummary.breakdown.map((row) => (
+                  <div key={row.stars} className="flex items-center gap-2.5 text-xs">
+                    <span className="w-7 font-medium text-neutral-700 tabular-nums">{row.stars} ★</span>
+                    <div className="flex-1 h-2 bg-neutral-200 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-neutral-950 rounded-full transition-all"
+                        style={{ width: `${row.percentage}%` }}
+                      />
+                    </div>
+                    <span className="w-9 text-right text-neutral-500 tabular-nums">{row.percentage}%</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Reviews List & Form */}
+            <div className="lg:col-span-8 space-y-6">
+              <div className="bg-white border border-neutral-200 rounded-2xl p-5">
+                <h3 className="font-display text-sm font-bold text-neutral-950">Write a Customer Review</h3>
+                {!user ? (
+                  <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
+                    <p className="text-xs text-neutral-500">
+                      Sign in with an account that purchased this T-shirt to leave a verified review.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => navigate({ page: 'auth' })}
+                      className="px-4 py-2 rounded-full bg-neutral-950 text-white text-xs font-semibold cursor-pointer"
+                    >
+                      Sign In
+                    </button>
+                  </div>
+                ) : !hasPurchased ? (
+                  <p className="mt-2 text-xs text-neutral-500">
+                    Verified buyer protection: only customers who have ordered <strong>{product.name}</strong>{' '}
+                    can submit a rating and review.
+                  </p>
+                ) : alreadyReviewed ? (
+                  <p className="mt-2 text-xs text-neutral-600 inline-flex items-center gap-1.5">
+                    <Check className="w-4 h-4 text-neutral-950" />
+                    You have reviewed this product. You can edit or delete your review below.
+                  </p>
+                ) : (
+                  <form onSubmit={handleReviewSubmit} className="mt-3 space-y-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-medium text-neutral-700">Your Rating:</span>
+                      <div className="flex items-center gap-1">
+                        {[1, 2, 3, 4, 5].map((s) => (
+                          <button
+                            key={s}
+                            type="button"
+                            onClick={() => setRatingInput(s)}
+                            aria-label={`Rate ${s} stars`}
+                            className="p-0.5 cursor-pointer"
+                          >
+                            <Star
+                              className={`w-5 h-5 ${
+                                s <= ratingInput ? 'fill-neutral-950 text-neutral-950' : 'text-neutral-300'
+                              }`}
+                            />
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <textarea
+                      rows={3}
+                      required
+                      value={commentInput}
+                      onChange={(e) => setCommentInput(e.target.value)}
+                      placeholder="Share details on fabric weight, fit, and comfort..."
+                      className="w-full rounded-xl border border-neutral-200 px-3.5 py-2.5 text-sm focus:outline-none focus:border-neutral-950"
+                    />
+                    <button
+                      type="submit"
+                      disabled={submittingReview}
+                      className="px-5 py-2.5 rounded-full bg-neutral-950 text-white text-xs font-semibold hover:bg-neutral-800 cursor-pointer disabled:opacity-50"
+                    >
+                      {submittingReview ? 'Publishing...' : 'Publish Verified Review'}
+                    </button>
+                  </form>
+                )}
+              </div>
+
+              {reviews.length === 0 ? (
+                <div className="text-center py-10 bg-neutral-50 rounded-2xl border border-neutral-200/70">
+                  <p className="text-sm font-medium text-neutral-700">No reviews yet</p>
+                  <p className="text-xs text-neutral-500 mt-1">Verified buyer feedback will appear here.</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {reviews.map((rev) => {
+                    const isOwner = user?.id === rev.userId;
+                    const isEditing = editingReviewId === rev.id;
+
+                    return (
+                      <article
+                        key={rev.id}
+                        className="bg-white border border-neutral-200/80 rounded-2xl p-5"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex items-center gap-3">
+                            <div className="w-9 h-9 rounded-full bg-neutral-200 text-neutral-800 text-xs font-bold flex items-center justify-center">
+                              {rev.userName.charAt(0).toUpperCase()}
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-semibold text-neutral-950">{rev.userName}</span>
+                                {rev.verifiedPurchase && (
+                                  <span className="inline-flex items-center gap-1 text-[11px] font-medium text-neutral-600">
+                                    <ShieldCheck className="w-3.5 h-3.5 text-neutral-950" />
+                                    Verified Buyer
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-1 mt-0.5">
+                                {[1, 2, 3, 4, 5].map((s) => (
+                                  <Star
+                                    key={s}
+                                    className={`w-3.5 h-3.5 ${
+                                      s <= rev.rating ? 'fill-neutral-950 text-neutral-950' : 'text-neutral-300'
+                                    }`}
+                                  />
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+
+                          <span className="text-xs text-neutral-400">
+                            {new Date(rev.createdAt).toLocaleDateString()}
+                          </span>
+                        </div>
+
+                        {isEditing ? (
+                          <div className="mt-3 space-y-2.5">
+                            <div className="flex items-center gap-1">
+                              {[1, 2, 3, 4, 5].map((s) => (
+                                <button
+                                  key={s}
+                                  type="button"
+                                  onClick={() => setEditRating(s)}
+                                  className="p-0.5 cursor-pointer"
+                                >
+                                  <Star
+                                    className={`w-4 h-4 ${
+                                      s <= editRating ? 'fill-neutral-950 text-neutral-950' : 'text-neutral-300'
+                                    }`}
+                                  />
+                                </button>
+                              ))}
+                            </div>
+                            <textarea
+                              rows={2}
+                              value={editComment}
+                              onChange={(e) => setEditComment(e.target.value)}
+                              className="w-full rounded-xl border border-neutral-200 px-3 py-2 text-sm focus:outline-none focus:border-neutral-950"
+                            />
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handleSaveEdit(rev.id)}
+                                className="px-4 py-1.5 rounded-full bg-neutral-950 text-white text-xs font-semibold cursor-pointer"
+                              >
+                                Save
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setEditingReviewId(null)}
+                                className="px-4 py-1.5 rounded-full border border-neutral-200 text-xs font-medium cursor-pointer"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="mt-3 text-sm text-neutral-700 leading-relaxed">{rev.comment}</p>
+                        )}
+
+                        <div className="mt-4 flex items-center justify-between pt-3 border-t border-neutral-100">
+                          <button
+                            type="button"
+                            onClick={() => handleLikeReview(rev.id)}
+                            className={`inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1 rounded-full border transition-colors cursor-pointer ${
+                              rev.userHasLiked
+                                ? 'bg-neutral-950 text-white border-neutral-950'
+                                : 'bg-white text-neutral-600 border-neutral-200 hover:border-neutral-400'
+                            }`}
+                          >
+                            <ThumbsUp className="w-3.5 h-3.5" />
+                            <span>Helpful ({rev.helpfulCount})</span>
+                          </button>
+
+                          {isOwner && !isEditing && (
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingReviewId(rev.id);
+                                  setEditRating(rev.rating);
+                                  setEditComment(rev.comment);
+                                }}
+                                aria-label="Edit review"
+                                className="inline-flex items-center gap-1 text-xs text-neutral-600 hover:text-neutral-950 cursor-pointer"
+                              >
+                                <Edit3 className="w-3.5 h-3.5" />
+                                <span>Edit</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteReview(rev.id)}
+                                aria-label="Delete review"
+                                className="inline-flex items-center gap-1 text-xs text-neutral-500 hover:text-neutral-950 cursor-pointer"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                                <span>Delete</span>
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
