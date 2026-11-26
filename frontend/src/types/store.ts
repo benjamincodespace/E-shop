@@ -1,4 +1,4 @@
-export type CurrencyCode = 'USD' | 'EUR' | 'TZS' | 'RWF' | 'XOF';
+export type CurrencyCode = 'USD' | 'EUR' | 'ZAR' | 'KES' | 'TZS' | 'UGX' | 'RWF' | 'XOF';
 
 export type UserRole = 'customer' | 'admin';
 

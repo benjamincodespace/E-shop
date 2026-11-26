@@ -3,6 +3,8 @@
 import React from 'react';
 import { MobileBottomNav, StoreHeader } from './StoreHeader';
 import { Footer } from './Footer';
+import { SettingsPanel } from './SettingsPanel';
+import { FloatingCartButton } from '@/features/cart/components/FloatingCartButton';
 
 export const StoreShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   return (
@@ -11,6 +13,8 @@ export const StoreShell: React.FC<{ children: React.ReactNode }> = ({ children }
       <main className="flex-1">{children}</main>
       <Footer />
       <MobileBottomNav />
+      <FloatingCartButton />
+      <SettingsPanel />
     </div>
   );
 };

@@ -20,6 +20,7 @@ import { ProductCardSkeleton } from './ProductCardSkeleton';
 import { ProductQuickPanel } from './ProductQuickPanel';
 import { SafeImage } from './SafeImage';
 import { filterAndSortProducts } from '@/lib/storeLogic';
+import { formatPrice } from '@/lib/currency';
 
 const HERO_SLIDES = [
   {
@@ -56,6 +57,8 @@ export const StorefrontHome: React.FC<StorefrontHomeProps> = ({
     setSelectedProduct,
     navigate,
     globalSearch,
+    currency,
+    t,
   } = useStore();
 
   useEffect(() => {
@@ -132,8 +135,8 @@ export const StorefrontHome: React.FC<StorefrontHomeProps> = ({
             <div className="w-11 h-11 rounded-2xl bg-white shadow-sm flex items-center justify-center mx-auto text-neutral-950">
               <Shirt className="w-5 h-5" />
             </div>
-            <h3 className="mt-3 font-display text-sm font-bold text-neutral-950">Free Shipping</h3>
-            <p className="mt-1 text-xs text-neutral-500">On orders over $50</p>
+            <h3 className="mt-3 font-display text-sm font-bold text-neutral-950">{t('home.freeShipping')}</h3>
+            <p className="mt-1 text-xs text-neutral-500">{t('home.ordersOver', { amount: formatPrice(50, 'USD', currency) })}</p>
             <button
               type="button"
               onClick={() => navigate({ page: 'catalog' })}
@@ -146,7 +149,7 @@ export const StorefrontHome: React.FC<StorefrontHomeProps> = ({
         </aside>
 
         {/* Center Storefront Content */}
-        <section className="lg:col-span-6 space-y-6 lg:h-full lg:min-h-0 lg:overflow-y-auto lg:pb-6 lg:pr-1.5">
+        <section className="lg:col-span-6 space-y-6 lg:h-full lg:min-h-0 lg:overflow-y-auto lg:overscroll-contain lg:pb-6 lg:pr-1.5">
           {/* Hero Promotional Banner */}
           <div className="relative rounded-3xl overflow-hidden bg-neutral-100 border border-neutral-200/70 min-h-[220px] sm:min-h-[260px] flex items-center">
             <SafeImage
@@ -167,7 +170,7 @@ export const StorefrontHome: React.FC<StorefrontHomeProps> = ({
                 onClick={() => navigate({ page: 'catalog', category: slide.category })}
                 className="mt-4 sm:mt-5 px-5 py-2.5 rounded-full bg-neutral-950 text-white text-xs font-semibold inline-flex items-center gap-2 hover:bg-neutral-800 transition-colors cursor-pointer"
               >
-                <span>{slide.cta}</span>
+                <span>{heroIdx === 0 ? t('home.shopNow') : t('home.explore')}</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
             </div>
@@ -210,7 +213,7 @@ export const StorefrontHome: React.FC<StorefrontHomeProps> = ({
           {/* Service Highlights Strip */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
             {[
-              { icon: Truck, title: 'Free Shipping', sub: 'Orders over $50' },
+              { icon: Truck, title: t('home.freeShipping'), sub: t('home.ordersOver', { amount: formatPrice(50, 'USD', currency) }) },
               { icon: RefreshCw, title: 'Easy Returns', sub: 'Within 7 days' },
               { icon: ShieldCheck, title: 'Verified Quality', sub: '240gsm cotton' },
               { icon: Shirt, title: 'Minimalist Fit', sub: 'Sizes S to XXL' },
@@ -233,9 +236,9 @@ export const StorefrontHome: React.FC<StorefrontHomeProps> = ({
             <div className="flex items-center gap-1 bg-neutral-100 p-1 rounded-xl shrink-0">
               {(
                 [
-                  { id: 'popular', label: 'Popular' },
-                  { id: 'newest', label: 'New Arrivals' },
-                  { id: 'rated', label: 'Top Rated' },
+                  { id: 'popular', label: t('home.popular') },
+                  { id: 'newest', label: t('home.newArrivals') },
+                  { id: 'rated', label: t('home.topRated') },
                 ] as const
               ).map((tab) => (
                 <button
@@ -258,7 +261,7 @@ export const StorefrontHome: React.FC<StorefrontHomeProps> = ({
               onClick={() => navigate({ page: 'catalog' })}
               className="text-xs font-semibold text-neutral-700 hover:text-neutral-950 inline-flex items-center gap-1 whitespace-nowrap shrink-0 cursor-pointer"
             >
-              <span>See All</span>
+              <span>{t('home.seeAll')}</span>
               <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </div>
@@ -272,7 +275,7 @@ export const StorefrontHome: React.FC<StorefrontHomeProps> = ({
             </div>
           ) : displayProducts.length === 0 ? (
             <div className="bg-neutral-50 border border-neutral-200/80 rounded-2xl p-8 text-center">
-              <p className="font-display text-base font-semibold text-neutral-950">No matching T-shirts</p>
+              <p className="font-display text-base font-semibold text-neutral-950">{t('home.noMatches')}</p>
               <p className="mt-1 text-xs text-neutral-500">
                 Try clearing your search filter or exploring the full catalog.
               </p>
@@ -281,7 +284,7 @@ export const StorefrontHome: React.FC<StorefrontHomeProps> = ({
                 onClick={() => navigate({ page: 'catalog' })}
                 className="mt-4 px-5 py-2 rounded-full bg-neutral-950 text-white text-xs font-semibold cursor-pointer"
               >
-                Explore All T-Shirts
+                {t('home.exploreAll')}
               </button>
             </div>
           ) : (
@@ -306,7 +309,7 @@ export const StorefrontHome: React.FC<StorefrontHomeProps> = ({
           {categories.length > 0 && (
             <div className="pt-2">
               <div className="flex items-center justify-between mb-3">
-                <h2 className="font-display text-base font-bold text-neutral-950">Browse by Category</h2>
+                <h2 className="font-display text-base font-bold text-neutral-950">{t('home.browseCategories')}</h2>
                 <button
                   type="button"
                   onClick={() => navigate({ page: 'catalog' })}

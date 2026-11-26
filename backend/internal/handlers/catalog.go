@@ -207,7 +207,7 @@ func (h *CatalogHandler) CreateProduct(w http.ResponseWriter, r *http.Request) {
 	popular := body.Popular != nil && *body.Popular
 	seoTitle := strings.TrimSpace(body.SEOTitle)
 	if seoTitle == "" {
-		seoTitle = name + " | TeeStore"
+		seoTitle = name + " | E-shop All"
 	}
 	seoDesc := strings.TrimSpace(body.SEODescription)
 	if seoDesc == "" {

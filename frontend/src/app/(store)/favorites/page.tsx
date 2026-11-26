@@ -3,7 +3,7 @@ import { FavoritesView } from '@/components/FavoritesView';
 
 export const metadata: Metadata = {
   title: 'Saved Favorites',
-  description: 'Your saved monochrome T-shirts on TeeStore.',
+  description: 'Your saved monochrome T-shirts on E-shop All.',
   robots: { index: false, follow: false },
 };
 

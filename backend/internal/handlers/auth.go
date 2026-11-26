@@ -194,6 +194,8 @@ func (h *AuthHandler) ClaimAdmin(w http.ResponseWriter, r *http.Request) {
 	h.issueAuthResponse(w, r, http.StatusCreated, user, []string{})
 }
 
+// Register creates a shopper account. Only a phone number and password are
+// required; name, email and address stay optional.
 func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Name     string `json:"name"`
@@ -207,17 +209,8 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	name := strings.TrimSpace(body.Name)
 	email := strings.ToLower(strings.TrimSpace(body.Email))
 	phone := normalizePhone(body.Phone)
-	if len(name) < 2 {
-		WriteError(w, http.StatusBadRequest, "Name must be at least 2 characters.")
-		return
-	}
-	if email != "" && !strings.Contains(email, "@") {
-		WriteError(w, http.StatusBadRequest, "Please enter a valid email address.")
-		return
-	}
 	if phone == "" {
 		WriteError(w, http.StatusBadRequest, "Phone number is required.")
 		return
@@ -229,6 +222,22 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	if len(body.Password) < 6 {
 		WriteError(w, http.StatusBadRequest, "Password must be at least 6 characters.")
 		return
+	}
+	if email != "" && !strings.Contains(email, "@") {
+		WriteError(w, http.StatusBadRequest, "Please enter a valid email address.")
+		return
+	}
+
+	// Shoppers may sign up with only a phone number and password, so a friendly
+	// default name is derived from the number for order receipts and the admin
+	// customer list. It can be changed later from the profile.
+	name := strings.TrimSpace(body.Name)
+	if len(name) < 2 {
+		digits := strings.TrimPrefix(phone, "+")
+		if len(digits) > 4 {
+			digits = digits[len(digits)-4:]
+		}
+		name = "Shopper " + digits
 	}
 
 	if email != "" {

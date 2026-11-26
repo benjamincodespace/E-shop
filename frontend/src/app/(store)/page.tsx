@@ -6,7 +6,7 @@ export const revalidate = 30;
 
 export const metadata: Metadata = {
   title: {
-    absolute: 'TeeStore — Minimalist Premium T-Shirt Store',
+    absolute: 'E-shop All — Minimalist Premium T-Shirt Store',
   },
   description:
     'Shop heavyweight monochrome T-shirts crafted for everyday comfort. Browse popular drops, verified customer reviews, and fast shipping.',
@@ -28,7 +28,7 @@ export default async function HomePage() {
       {
         '@type': 'Organization',
         '@id': `${origin}/#organization`,
-        name: 'TeeStore',
+        name: 'E-shop All',
         url: origin,
         logo: `${origin}/images/hero_monochrome_tee_1795513062252.jpg`,
       },
@@ -36,7 +36,7 @@ export default async function HomePage() {
         '@type': 'WebSite',
         '@id': `${origin}/#website`,
         url: origin,
-        name: 'TeeStore',
+        name: 'E-shop All',
         publisher: { '@id': `${origin}/#organization` },
         potentialAction: {
           '@type': 'SearchAction',

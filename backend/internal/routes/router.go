@@ -27,6 +27,7 @@ func NewRouter(
 	// Auth
 	mux.HandleFunc("GET /api/auth/admin/status", authH.AdminStatus)
 	mux.HandleFunc("POST /api/auth/admin/claim", middleware.RateLimit(rl, 10, time.Minute, authH.ClaimAdmin))
+	mux.HandleFunc("POST /api/auth/register", middleware.RateLimit(rl, 10, time.Minute, authH.Register))
 	mux.HandleFunc("POST /api/auth/login", middleware.RateLimit(rl, 20, time.Minute, authH.Login))
 	mux.HandleFunc("POST /api/auth/refresh", authH.Refresh)
 	mux.HandleFunc("POST /api/auth/logout", authH.Logout)

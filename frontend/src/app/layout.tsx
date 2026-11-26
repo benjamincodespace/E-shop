@@ -2,25 +2,26 @@ import type { Metadata } from 'next';
 import './globals.css';
 import { StoreProvider } from '@/context/StoreContext';
 import { ToastStack } from '@/components/ToastStack';
-import { getSiteOrigin } from '@/lib/serverCatalog';
+import { ScrollActivity } from '@/components/ScrollActivity';
+import { getSiteOrigin } from '@/features/products/services/catalog.service';
+import { SITE } from '@/config/site';
 
 const siteOrigin = getSiteOrigin();
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteOrigin),
   title: {
-    default: 'TeeStore — Minimalist Premium T-Shirt Store',
-    template: '%s — TeeStore',
+    default: SITE.title,
+    template: `%s — ${SITE.name}`,
   },
-  description:
-    'Shop heavyweight monochrome T-shirts crafted for everyday comfort. Browse popular drops, verified customer reviews, and fast shipping.',
+  description: SITE.description,
   alternates: {
     canonical: '/',
   },
   openGraph: {
     type: 'website',
-    siteName: 'TeeStore',
-    title: 'TeeStore — Minimalist Premium T-Shirt Store',
+    siteName: SITE.name,
+    title: SITE.title,
     description:
       'Shop heavyweight monochrome T-shirts crafted for everyday comfort. Browse popular drops, verified customer reviews, and fast shipping.',
     url: siteOrigin,
@@ -29,14 +30,14 @@ export const metadata: Metadata = {
         url: '/images/hero_monochrome_tee_1795513062252.jpg',
         width: 1200,
         height: 630,
-        alt: 'TeeStore — Wear Your Style',
+        alt: `${SITE.name} — ${SITE.tagline}`,
       },
     ],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'TeeStore — Minimalist Premium T-Shirt Store',
-    description: 'Shop heavyweight monochrome T-shirts crafted for everyday comfort.',
+    title: SITE.title,
+    description: SITE.description,
     images: ['/images/hero_monochrome_tee_1795513062252.jpg'],
   },
   robots: {
@@ -58,6 +59,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className="min-h-screen bg-white text-neutral-950 antialiased selection:bg-neutral-950 selection:text-white">
         <StoreProvider>
+          <ScrollActivity />
           {children}
           <ToastStack />
         </StoreProvider>

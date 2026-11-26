@@ -6,9 +6,12 @@ import type {
   Review,
   SortOption,
 } from '../types/store';
+import { convertCurrency, roundForCurrency } from './currency';
+import { FREE_SHIPPING_THRESHOLD, STANDARD_SHIPPING_FEE } from '@/constants/shop';
 
-export const FREE_SHIPPING_THRESHOLD = 50;
-export const STANDARD_SHIPPING_FEE = 6;
+export { FREE_SHIPPING_THRESHOLD, STANDARD_SHIPPING_FEE };
+
+
 
 export const ORDER_STATUS_FLOW: Record<OrderStatus, OrderStatus[]> = {
   Pending: ['Confirmed', 'Processing', 'Cancelled'],
@@ -155,7 +158,8 @@ export function filterAndSortProducts(
       return false;
     }
     const effective = getEffectivePrice(p);
-    if (!matchesPriceRange(effective, priceRange)) return false;
+    const effectiveUSD = convertCurrency(effective, p.currency, 'USD');
+    if (!matchesPriceRange(effectiveUSD, priceRange)) return false;
     if (q) {
       const hay = `${p.name} ${p.description} ${p.categoryName}`.toLowerCase();
       if (!hay.includes(q)) return false;
@@ -166,9 +170,11 @@ export function filterAndSortProducts(
   return [...filtered].sort((a, b) => {
     switch (sortBy) {
       case 'price-asc':
-        return getEffectivePrice(a) - getEffectivePrice(b);
+        return convertCurrency(getEffectivePrice(a), a.currency, 'USD') -
+          convertCurrency(getEffectivePrice(b), b.currency, 'USD');
       case 'price-desc':
-        return getEffectivePrice(b) - getEffectivePrice(a);
+        return convertCurrency(getEffectivePrice(b), b.currency, 'USD') -
+          convertCurrency(getEffectivePrice(a), a.currency, 'USD');
       case 'rating':
         return (
           computeWeightedRatingScore(b.ratingAvg, b.reviewCount) -

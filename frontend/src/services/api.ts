@@ -10,6 +10,7 @@ import type {
   SortOption,
   User,
 } from '@/types/store';
+import { prepareImageForUpload, uploadToCloudinary } from '@/lib/imageUpload';
 
 const API_BASE = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080').replace(/\/+$/, '');
 
@@ -59,6 +60,7 @@ async function tryRefreshAccessToken(): Promise<string | null> {
 // Endpoints that must never loop through the refresh-and-retry cycle.
 const NO_RETRY_AUTH_PATHS = [
   '/api/auth/login',
+  '/api/auth/register',
   '/api/auth/admin/claim',
   '/api/auth/refresh',
   '/api/auth/logout',
@@ -112,8 +114,14 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(payload),
     }),
+  // Shopper sign-up: a phone number and password are all that is required.
+  register: (payload: { phone: string; password: string; name?: string; email?: string; address?: string }) =>
+    apiRequest<{ user: User; token: string; purchasedProductIds: string[] }>('/api/auth/register', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
   // Admin console sign-in only; shoppers check out as guests.
-  login: (payload: { email: string; password: string; portal: 'admin' }) =>
+  login: (payload: { email: string; password: string; portal: 'admin' | 'customer' }) =>
     apiRequest<{ user: User; token: string; purchasedProductIds: string[] }>('/api/auth/login', {
       method: 'POST',
       body: JSON.stringify(payload),
@@ -169,12 +177,15 @@ export const api = {
     address: string;
     notes: string;
     paymentMethod: string;
+    currency?: string;
     items: Array<{ productId: string; size: string; color: string; quantity: number }>;
   }) =>
     apiRequest<{ order: Order }>('/api/orders', {
       method: 'POST',
       body: JSON.stringify(payload),
     }),
+
+  getMyOrders: () => apiRequest<{ orders: Order[] }>('/api/orders/my-orders'),
 
   // Reviews
   getProductReviews: (productId: string) =>
@@ -225,10 +236,34 @@ export const api = {
       folder?: string;
       signature?: string;
     }>('/api/admin/cloudinary-signature', { method: 'POST' }),
-  uploadProductImage: (file: File) => {
+  // Uploads go straight from the browser to Cloudinary with the admin-signed
+  // params, which is one network hop instead of two and reports real progress.
+  uploadProductImage: async (file: File, onProgress?: (percent: number) => void) => {
+    onProgress?.(1);
+    const signature = await api.getCloudinarySignature().catch(() => null);
+
+    if (
+      signature?.configured &&
+      signature.cloudName &&
+      signature.apiKey &&
+      signature.signature &&
+      signature.timestamp
+    ) {
+      const prepared = await prepareImageForUpload(file);
+      try {
+        const url = await uploadToCloudinary(prepared, signature, onProgress);
+        return { url };
+      } catch (err) {
+        // A blocked direct upload falls back to relaying through the API server.
+        if (!(err instanceof Error) || err.message !== 'NETWORK') throw err;
+      }
+    }
+
     const form = new FormData();
     form.append('file', file);
-    return apiRequest<{ url: string }>('/api/admin/uploads', { method: 'POST', body: form });
+    const res = await apiRequest<{ url: string }>('/api/admin/uploads', { method: 'POST', body: form });
+    onProgress?.(100);
+    return res;
   },
   getAdminOrders: (params?: { status?: string; search?: string }) => {
     const qs = new URLSearchParams();

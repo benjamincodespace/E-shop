@@ -50,7 +50,7 @@ export const Footer: React.FC = () => {
             </li>
             <li>
               <button type="button" onClick={() => navigate({ page: 'about' })} className="hover:text-neutral-950 cursor-pointer">
-                About TeeStore
+                About E-shop All
               </button>
             </li>
             <li>
@@ -65,6 +65,11 @@ export const Footer: React.FC = () => {
           <h3 className="font-display text-xs font-bold text-neutral-950 mb-3">Customer Care</h3>
           <ul className="space-y-2 text-xs text-neutral-600">
             <li>
+              <button type="button" onClick={() => navigate({ page: 'signup' })} className="hover:text-neutral-950 cursor-pointer">
+                Create Account / Sign In
+              </button>
+            </li>
+            <li>
               <button type="button" onClick={() => navigate({ page: 'favorites' })} className="hover:text-neutral-950 cursor-pointer">
                 Saved Favorites
               </button>
@@ -74,7 +79,7 @@ export const Footer: React.FC = () => {
                 Shopping Cart
               </button>
             </li>
-            <li>support@teestore.studio</li>
+            <li>support@eshopall.studio</li>
           </ul>
         </div>
 
@@ -103,7 +108,7 @@ export const Footer: React.FC = () => {
       </div>
 
       <div className="border-t border-neutral-100 py-4 text-center text-[11px] text-neutral-400">
-        © {new Date().getFullYear()} TeeStore. All rights reserved.
+        © {new Date().getFullYear()} E-shop All. All rights reserved.
       </div>
     </footer>
   );

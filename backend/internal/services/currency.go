@@ -13,13 +13,17 @@ import (
 var currencyPerUSD = map[string]float64{
 	"USD": 1,
 	"EUR": 0.92,
+	"ZAR": 18.5,
+	"KES": 129,
 	"TZS": 2600,
+	"UGX": 3700,
 	"RWF": 1400,
 	"XOF": 600,
 }
 
 var zeroDecimalCurrencies = map[string]bool{
 	"TZS": true,
+	"UGX": true,
 	"RWF": true,
 	"XOF": true,
 }

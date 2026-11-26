@@ -12,6 +12,31 @@ import {
   slugifyProductName,
 } from './storeLogic';
 import type { CartItem, Product } from '../types/store';
+import { convertCurrency, formatCurrency, getCurrencyOption, normalizeCurrency, roundForCurrency } from './currency';
+
+test('exchange works across USD, EUR, ZAR, KES, TZS, UGX, RWF and XOF', () => {
+  assert.equal(convertCurrency(20, 'USD', 'ZAR'), 370);
+  assert.equal(convertCurrency(20, 'USD', 'USD'), 20);
+  assert.equal(convertCurrency(26000, 'TZS', 'USD'), 10);
+  assert.equal(Math.round(convertCurrency(100, 'RWF', 'TZS')), Math.round((100 / 1400) * 2600));
+
+  const roundTrip = convertCurrency(convertCurrency(49.99, 'USD', 'KES'), 'KES', 'USD');
+  assert.ok(Math.abs(roundTrip - 49.99) < 0.01);
+
+  for (const code of ['USD', 'EUR', 'ZAR', 'KES', 'TZS', 'UGX', 'RWF', 'XOF'] as const) {
+    assert.equal(normalizeCurrency(code), code);
+    assert.ok(getCurrencyOption(code).perUsd > 0);
+  }
+});
+
+test('currency formatting respects each currency\'s decimals and symbol', () => {
+  assert.equal(formatCurrency(1234.5, 'USD'), '$1,234.50');
+  assert.equal(formatCurrency(1234.5, 'ZAR'), 'R1,234.50');
+  assert.equal(formatCurrency(129, 'KES'), 'KSh 129.00');
+  assert.equal(formatCurrency(2600, 'TZS'), 'TSh 2,600');
+  assert.equal(formatCurrency(1400.4, 'RWF'), 'FRw 1,400');
+  assert.equal(roundForCurrency(3700.6, 'UGX'), 3701);
+});
 
 test('pricing and discount calculation', () => {
   assert.equal(getEffectivePrice({ price: 22, discountPrice: 15 }), 15);
@@ -79,6 +104,7 @@ test('catalog filtering by category, price range, and rating sort', () => {
       description: 'Soft black cotton',
       price: 22,
       discountPrice: 15,
+      currency: 'USD',
       categoryId: 'c1',
       categoryName: 'Classics',
       categorySlug: 'classics',
@@ -103,6 +129,7 @@ test('catalog filtering by category, price range, and rating sort', () => {
       description: '300gsm heavy cotton',
       price: 42,
       discountPrice: 36,
+      currency: 'USD',
       categoryId: 'c2',
       categoryName: 'Streetwear',
       categorySlug: 'streetwear',

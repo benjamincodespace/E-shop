@@ -1,6 +1,6 @@
-# TeeStore — Production Monorepo (Next.js + Golang + MongoDB + Cloudinary + Cloudflare)
+# E-shop All — Production Monorepo (Next.js + Golang + MongoDB + Cloudinary + Cloudflare)
 
-**TeeStore** is a minimalist monochrome T-shirt e-commerce platform built with a **Next.js App Router** frontend (configured for **Cloudflare Workers** via **OpenNext**), a **Golang (Go 1.23)** REST API using Clean Architecture, **MongoDB Atlas** with ACID transactions, and **Cloudinary** signed image uploads.
+**E-shop All** is a minimalist monochrome T-shirt e-commerce platform built with a **Next.js App Router** frontend (configured for **Cloudflare Workers** via **OpenNext**), a **Golang (Go 1.23)** REST API using Clean Architecture, **MongoDB Atlas** with ACID transactions, and **Cloudinary** signed image uploads.
 
 ---
 
@@ -9,10 +9,10 @@
 ```text
 Customer / Admin Browser
         │
-        ├── https://teestore.example.com ──▶ Cloudflare Workers (Next.js 15 App Router via @opennextjs/cloudflare)
+        ├── https://eshopall.example.com ──▶ Cloudflare Workers (Next.js 15 App Router via @opennextjs/cloudflare)
         │                                      └─ Server Components SSR / ISR (products, SEO metadata, JSON-LD, sitemap.xml)
         │
-        ├── https://api.teestore.example.com ─▶ Cloudflare DNS/Proxy + SSL (Full Strict)
+        ├── https://api.eshopall.example.com ─▶ Cloudflare DNS/Proxy + SSL (Full Strict)
         │                                         └─ Container Compute (Google Cloud Run / Fly.io) running Go 1.23 API
         │                                               ├─ MongoDB Atlas (ACID multi-doc transactions + indexes)
         │                                               └─ Cloudinary Admin/Upload API (SHA-1 signed uploads & cleanup)
@@ -136,32 +136,32 @@ Build and push the multi-stage container image in `teestore/backend/Dockerfile`:
 
 ```bash
 cd teestore/backend
-docker build -t gcr.io/YOUR_PROJECT/teestore-api:latest .
-docker push gcr.io/YOUR_PROJECT/teestore-api:latest
+docker build -t gcr.io/YOUR_PROJECT/eshopall-api:latest .
+docker push gcr.io/YOUR_PROJECT/eshopall-api:latest
 ```
 
 Deploy to Cloud Run (or Fly.io) with environment variables configured in Secret Manager:
 - `APP_ENV=production`
-- `APP_URL=https://teestore.example.com`
-- `FRONTEND_ORIGIN=https://teestore.example.com`
+- `APP_URL=https://eshopall.example.com`
+- `FRONTEND_ORIGIN=https://eshopall.example.com`
 - `MONGODB_URI=mongodb+srv://...`
 - `JWT_SECRET=<strong-random-64-hex>`
 - `JWT_REFRESH_SECRET=<strong-random-64-hex>`
 - `ADMIN_PASSCODE=<strong-admin-passcode>` (optional; omit to use one-time first-run admin claim)
 - `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`
 
-Point `api.teestore.example.com` to your Cloud Run / Fly.io origin in **Cloudflare DNS** (Proxied, SSL/TLS mode **Full (Strict)**).
+Point `api.eshopall.example.com` to your Cloud Run / Fly.io origin in **Cloudflare DNS** (Proxied, SSL/TLS mode **Full (Strict)**).
 
 ### 2. Deploy Next.js to Cloudflare Workers (OpenNext)
 
 ```bash
 cd teestore/frontend
-# Ensure NEXT_PUBLIC_API_URL=https://api.teestore.example.com
-# Ensure API_INTERNAL_URL=https://api.teestore.example.com
-# Ensure NEXT_PUBLIC_APP_URL=https://teestore.example.com
+# Ensure NEXT_PUBLIC_API_URL=https://api.eshopall.example.com
+# Ensure API_INTERNAL_URL=https://api.eshopall.example.com
+# Ensure NEXT_PUBLIC_APP_URL=https://eshopall.example.com
 
 npm run cf:build
 npm run cf:deploy
 ```
 
-Bind your custom domain `teestore.example.com` to the `teestore-frontend` Cloudflare Worker in the Cloudflare dashboard.
+Bind your custom domain `eshopall.example.com` to the `teestore-frontend` Cloudflare Worker in the Cloudflare dashboard.

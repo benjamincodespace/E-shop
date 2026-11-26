@@ -1,14 +1,15 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Heart, Home, LayoutGrid, Search, ShoppingCart } from 'lucide-react';
+import { Heart, Home, LayoutGrid, Search, Settings, ShoppingCart, UserPlus } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
 import { calculateCartSummary } from '@/lib/storeLogic';
 import { useAutoHideBars } from '@/lib/useAutoHideBars';
 import { BrandLogo } from './BrandLogo';
+import { CurrencySwitcher } from './CurrencySwitcher';
 
 export const StoreHeader: React.FC = () => {
-  const { route, navigate, cart, wishlistIds, globalSearch, setGlobalSearch } = useStore();
+  const { route, navigate, cart, wishlistIds, globalSearch, setGlobalSearch, user, setSettingsOpen, t } = useStore();
   const barsHidden = useAutoHideBars();
   const [localSearch, setLocalSearch] = useState(globalSearch);
   const { itemCount } = calculateCartSummary(cart);
@@ -41,7 +42,7 @@ export const StoreHeader: React.FC = () => {
           type="button"
           onClick={() => navigate({ page: 'home' })}
           className="shrink-0 cursor-pointer focus-visible:outline-2 focus-visible:outline-neutral-950 rounded-lg"
-          aria-label="TeeStore Home"
+          aria-label="E-shop All Home"
         >
           <BrandLogo subtitle="Wear Your Style" />
         </button>
@@ -56,7 +57,7 @@ export const StoreHeader: React.FC = () => {
                 route.page === 'home' ? 'text-neutral-950 underline underline-offset-4' : ''
               }`}
             >
-              Home
+              {t('nav.home')}
             </button>
             <button
               type="button"
@@ -65,7 +66,7 @@ export const StoreHeader: React.FC = () => {
                 route.page === 'catalog' ? 'text-neutral-950 underline underline-offset-4' : ''
               }`}
             >
-              Catalog
+              {t('nav.catalog')}
             </button>
             <button
               type="button"
@@ -74,14 +75,14 @@ export const StoreHeader: React.FC = () => {
                 route.page === 'about' ? 'text-neutral-950 underline underline-offset-4' : ''
               }`}
             >
-              About
+              {t('nav.about')}
             </button>
             <button
               type="button"
               onClick={() => navigate({ page: 'admin' })}
               className="whitespace-nowrap shrink-0 hover:text-neutral-950 transition-colors cursor-pointer"
             >
-              Admin
+              {t('nav.admin')}
             </button>
           </nav>
 
@@ -97,7 +98,7 @@ export const StoreHeader: React.FC = () => {
                 setLocalSearch(e.target.value);
                 setGlobalSearch(e.target.value);
               }}
-              placeholder="Search T-shirts..."
+              placeholder={t('search.placeholder')}
               aria-label="Search T-shirts"
               className="w-full bg-transparent text-xs text-neutral-900 placeholder:text-neutral-400 focus:outline-none"
             />
@@ -106,6 +107,27 @@ export const StoreHeader: React.FC = () => {
 
         {/* Zone 3: Wishlist and Cart Badge */}
         <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+          <button
+            type="button"
+            onClick={() => setSettingsOpen(true)}
+            aria-label={t('nav.settings')}
+            title={t('nav.settings')}
+            className="hidden md:flex w-10 h-10 rounded-full hover:bg-neutral-100 items-center justify-center text-neutral-800 transition-colors cursor-pointer"
+          >
+            <Settings className="w-4.5 h-4.5" />
+          </button>
+          <div className="hidden md:block">
+            <CurrencySwitcher />
+          </div>
+          <button
+            type="button"
+            onClick={() => navigate({ page: 'signup' })}
+            aria-label={user ? 'Your account' : 'Create an account'}
+            className="relative w-10 h-10 rounded-full hover:bg-neutral-100 flex items-center justify-center text-neutral-800 transition-colors cursor-pointer"
+          >
+            <UserPlus className="w-4.5 h-4.5" />
+          </button>
+
           <button
             type="button"
             onClick={() => navigate({ page: 'favorites' })}
@@ -136,10 +158,10 @@ export const StoreHeader: React.FC = () => {
       </div>
 
       {/* Mobile Search Bar */}
-      <div className="md:hidden px-4 pb-3">
+      <div className="md:hidden px-4 pb-3 flex items-center gap-2">
         <form
           onSubmit={handleSearchSubmit}
-          className="flex items-center gap-2 bg-neutral-100 rounded-full px-3.5 py-2"
+          className="flex-1 flex items-center gap-2 bg-neutral-100 rounded-full px-3.5 py-2"
         >
           <Search className="w-4 h-4 text-neutral-400 shrink-0" />
           <input
@@ -149,31 +171,32 @@ export const StoreHeader: React.FC = () => {
               setLocalSearch(e.target.value);
               setGlobalSearch(e.target.value);
             }}
-            placeholder="Search T-shirts..."
+            placeholder={t('search.placeholder')}
             aria-label="Search T-shirts on mobile"
             className="w-full bg-transparent text-xs text-neutral-900 placeholder:text-neutral-400 focus:outline-none"
           />
         </form>
+        <CurrencySwitcher compact />
       </div>
     </header>
   );
 };
 
 export const MobileBottomNav: React.FC = () => {
-  const { route, navigate } = useStore();
+  const { route, navigate, setSettingsOpen, t } = useStore();
   const barsHidden = useAutoHideBars();
 
   const items = [
-    { page: 'home' as const, label: 'Home', icon: Home },
-    { page: 'catalog' as const, label: 'Categories', icon: LayoutGrid },
-    { page: 'favorites' as const, label: 'Favorites', icon: Heart },
-    { page: 'cart' as const, label: 'Cart', icon: ShoppingCart },
+    { page: 'home' as const, label: t('nav.home'), icon: Home },
+    { page: 'catalog' as const, label: t('nav.categories'), icon: LayoutGrid },
+    { page: 'favorites' as const, label: t('nav.favorites'), icon: Heart },
+    { page: 'cart' as const, label: t('nav.cart'), icon: ShoppingCart },
   ];
 
   return (
     <nav
       aria-label="Mobile navigation"
-      className={`lg:hidden fixed bottom-0 inset-x-0 z-30 glass-surface border-t border-neutral-200/80 px-2 py-2 flex items-center justify-around transition-[transform,opacity] will-change-transform ${
+      className={`lg:hidden fixed bottom-0 inset-x-0 z-30 glass-surface border-t border-neutral-200/80 px-2 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] flex items-center justify-around transition-[transform,opacity] will-change-transform ${
         barsHidden
           ? 'translate-y-[120%] opacity-0 pointer-events-none duration-200 ease-[cubic-bezier(0.4,0,1,1)]'
           : 'translate-y-0 opacity-100 duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]'
@@ -198,6 +221,17 @@ export const MobileBottomNav: React.FC = () => {
           </button>
         );
       })}
+
+      <button
+        type="button"
+        onClick={() => setSettingsOpen(true)}
+        aria-label={t('nav.settings')}
+        aria-haspopup="dialog"
+        className="flex flex-col items-center gap-0.5 px-3 py-1 rounded-xl text-[11px] font-semibold cursor-pointer text-neutral-400"
+      >
+        <Settings className="w-5 h-5" />
+        <span>{t('nav.settings')}</span>
+      </button>
     </nav>
   );
 };

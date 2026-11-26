@@ -61,7 +61,7 @@ func main() {
 	}
 
 	go func() {
-		log.Printf("TeeStore Go API listening on :%s (env=%s)", cfg.Port, cfg.AppEnv)
+		log.Printf("E-shop All Go API listening on :%s (env=%s)", cfg.Port, cfg.AppEnv)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Fatalf("server error: %v", err)
 		}
@@ -80,5 +80,5 @@ func main() {
 	if err := storeDB.Client.Disconnect(shutdownCtx); err != nil {
 		log.Printf("mongo disconnect error: %v", err)
 	}
-	log.Println("TeeStore Go API stopped cleanly")
+	log.Println("E-shop All Go API stopped cleanly")
 }

@@ -17,7 +17,7 @@ export async function generateMetadata({ params }: ProductPageProps): Promise<Me
   if (!data?.product) {
     return {
       title: 'T-Shirt Details',
-      description: 'Explore minimalist heavyweight cotton T-shirts at TeeStore.',
+      description: 'Explore minimalist heavyweight cotton T-shirts at E-shop All.',
       alternates: {
         canonical: `/product/${encodeURIComponent(slug)}`,
       },
@@ -30,7 +30,7 @@ export async function generateMetadata({ params }: ProductPageProps): Promise<Me
 
   return {
     title: {
-      absolute: p.seoTitle || `${p.name} — TeeStore`,
+      absolute: p.seoTitle || `${p.name} — E-shop All`,
     },
     description: p.seoDescription || p.description,
     alternates: {
@@ -68,12 +68,12 @@ export default async function ProductPage({ params }: ProductPageProps) {
             description: product.seoDescription || product.description,
             image: product.images.map((img) => (img.startsWith('http') ? img : `${origin}${img}`)),
             sku: product.slug,
-            brand: { '@type': 'Brand', name: 'TeeStore' },
+            brand: { '@type': 'Brand', name: 'E-shop All' },
             category: product.categoryName,
             offers: {
               '@type': 'Offer',
               url: `${origin}/product/${encodeURIComponent(product.slug)}`,
-              priceCurrency: 'USD',
+              priceCurrency: product.currency || 'USD',
               price: getEffectivePrice(product).toFixed(2),
               availability:
                 product.stock > 0 ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock',

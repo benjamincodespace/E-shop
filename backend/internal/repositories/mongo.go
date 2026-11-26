@@ -236,7 +236,7 @@ func (s *StoreDB) SeedIfEmpty(ctx context.Context) error {
 			[]string{"S", "M", "L", "XL", "XXL"},
 			[]models.TeeColorOption{{Name: "Black", Hex: "#111111"}, {Name: "White", Hex: "#F4F4F5"}, {Name: "Graphite", Hex: "#4B5563"}},
 			28, true, true, time.Date(2026, 10, 5, 10, 0, 0, 0, time.UTC),
-			"Classic Crest Tee — Heavyweight Black Cotton | TeeStore",
+			"Classic Crest Tee — Heavyweight Black Cotton | E-shop All",
 			"Shop the Classic Crest Tee in 240gsm combed cotton. Breathable fit, reinforced neckline, and minimalist crest detail.",
 		),
 		makeProd(
@@ -247,7 +247,7 @@ func (s *StoreDB) SeedIfEmpty(ctx context.Context) error {
 			[]string{"S", "M", "L", "XL", "XXL"},
 			[]models.TeeColorOption{{Name: "White", Hex: "#FFFFFF"}, {Name: "Bone", Hex: "#EAE6DF"}, {Name: "Black", Hex: "#111111"}},
 			22, true, true, time.Date(2026, 10, 12, 10, 0, 0, 0, time.UTC),
-			"Minimalist White Tee — Organic Cotton Crewneck | TeeStore",
+			"Minimalist White Tee — Organic Cotton Crewneck | E-shop All",
 			"Crisp pure white organic cotton T-shirt with subtle chest typography and tailored everyday drape.",
 		),
 		makeProd(
@@ -258,7 +258,7 @@ func (s *StoreDB) SeedIfEmpty(ctx context.Context) error {
 			[]string{"S", "M", "L", "XL"},
 			[]models.TeeColorOption{{Name: "Washed Charcoal", Hex: "#27272A"}, {Name: "Jet Black", Hex: "#09090B"}},
 			16, true, true, time.Date(2026, 10, 20, 10, 0, 0, 0, time.UTC),
-			"STRCTR Boxy Heavyweight Tee — Washed Charcoal | TeeStore",
+			"STRCTR Boxy Heavyweight Tee — Washed Charcoal | E-shop All",
 			"Oversized 280gsm washed charcoal streetwear tee with dropped shoulders and architectural chest typography.",
 		),
 		makeProd(
@@ -269,7 +269,7 @@ func (s *StoreDB) SeedIfEmpty(ctx context.Context) error {
 			[]string{"S", "M", "L", "XL", "XXL"},
 			[]models.TeeColorOption{{Name: "Alabaster", Hex: "#ECE8E1"}, {Name: "White", Hex: "#FFFFFF"}},
 			4, false, true, time.Date(2026, 11, 1, 10, 0, 0, 0, time.UTC),
-			"Atelier Emblem Tee — Alabaster Graphic Cotton | TeeStore",
+			"Atelier Emblem Tee — Alabaster Graphic Cotton | E-shop All",
 			"Minimalist geometric emblem printed on pre-shrunk alabaster heavyweight cotton.",
 		),
 		makeProd(
@@ -280,7 +280,7 @@ func (s *StoreDB) SeedIfEmpty(ctx context.Context) error {
 			[]string{"S", "M", "L", "XL"},
 			[]models.TeeColorOption{{Name: "Graphite", Hex: "#3F3F46"}, {Name: "Black", Hex: "#111111"}},
 			19, false, true, time.Date(2026, 11, 8, 10, 0, 0, 0, time.UTC),
-			"Kinetic Horizon Athletic Tee — Dark Graphite | TeeStore",
+			"Kinetic Horizon Athletic Tee — Dark Graphite | E-shop All",
 			"Lightweight breathable performance cotton tee built for training and daily movement.",
 		),
 		makeProd(
@@ -291,7 +291,7 @@ func (s *StoreDB) SeedIfEmpty(ctx context.Context) error {
 			[]string{"M", "L", "XL", "XXL"},
 			[]models.TeeColorOption{{Name: "Carbon Black", Hex: "#0A0A0B"}},
 			0, false, false, time.Date(2026, 11, 12, 10, 0, 0, 0, time.UTC),
-			"Noir Studio Crew — Supima Black T-Shirt | TeeStore",
+			"Noir Studio Crew — Supima Black T-Shirt | E-shop All",
 			"Carbon-dyed Supima cotton tee with structured collar retention.",
 		),
 		makeProd(
@@ -302,7 +302,7 @@ func (s *StoreDB) SeedIfEmpty(ctx context.Context) error {
 			[]string{"S", "M", "L", "XL"},
 			[]models.TeeColorOption{{Name: "Charcoal", Hex: "#27272A"}, {Name: "Bone", Hex: "#E5E0D8"}},
 			11, true, false, time.Date(2026, 11, 16, 10, 0, 0, 0, time.UTC),
-			"Monolith Oversized 300gsm Tee | TeeStore",
+			"Monolith Oversized 300gsm Tee | E-shop All",
 			"Ultra-heavyweight 300gsm organic cotton oversized tee with enzyme wash finish.",
 		),
 		makeProd(
@@ -313,7 +313,7 @@ func (s *StoreDB) SeedIfEmpty(ctx context.Context) error {
 			[]string{"S", "M", "L", "XL", "XXL"},
 			[]models.TeeColorOption{{Name: "White", Hex: "#FFFFFF"}, {Name: "Bone", Hex: "#F3EFEA"}},
 			3, false, true, time.Date(2026, 11, 19, 10, 0, 0, 0, time.UTC),
-			"Pure Canvas Everyday Tee | TeeStore",
+			"Pure Canvas Everyday Tee | E-shop All",
 			"Essential everyday white tee in brushed cotton jersey.",
 		),
 	}
@@ -466,10 +466,10 @@ func (s *StoreDB) SeedIfEmpty(ctx context.Context) error {
 
 	// Seed default settings
 	settingsDocs := []interface{}{
-		models.StoreSetting{Key: "storeName", Value: "TeeStore"},
+		models.StoreSetting{Key: "storeName", Value: "E-shop All"},
 		models.StoreSetting{Key: "tagline", Value: "Wear Your Style"},
 		models.StoreSetting{Key: "freeShippingThreshold", Value: "50"},
-		models.StoreSetting{Key: "supportEmail", Value: "support@teestore.studio"},
+		models.StoreSetting{Key: "supportEmail", Value: "support@eshopall.studio"},
 	}
 	_, _ = s.DB.Collection("store_settings").InsertMany(ctx, settingsDocs)
 
