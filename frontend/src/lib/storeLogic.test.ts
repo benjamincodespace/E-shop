@@ -12,7 +12,7 @@ import {
   slugifyProductName,
 } from './storeLogic';
 import type { CartItem, Product } from '../types/store';
-import { convertCurrency, formatCurrency, getCurrencyOption, normalizeCurrency, roundForCurrency } from './currency';
+import { convertCurrency, formatCurrency, getCurrencyOption, normalizeCurrency, roundForCurrency } from '@/utils/currency';
 
 test('exchange works across USD, EUR, ZAR, KES, TZS, UGX, RWF and XOF', () => {
   assert.equal(convertCurrency(20, 'USD', 'ZAR'), 370);

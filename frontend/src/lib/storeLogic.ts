@@ -6,7 +6,7 @@ import type {
   Review,
   SortOption,
 } from '../types/store';
-import { convertCurrency, roundForCurrency } from './currency';
+import { convertCurrency, roundForCurrency } from '@/utils/currency';
 import { FREE_SHIPPING_THRESHOLD, STANDARD_SHIPPING_FEE } from '@/constants/shop';
 
 export { FREE_SHIPPING_THRESHOLD, STANDARD_SHIPPING_FEE };

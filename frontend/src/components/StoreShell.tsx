@@ -3,7 +3,7 @@
 import React from 'react';
 import { MobileBottomNav, StoreHeader } from './StoreHeader';
 import { Footer } from './Footer';
-import { SettingsPanel } from './SettingsPanel';
+import { SettingsPanel } from '@/features/settings/components/SettingsPanel';
 import { FloatingCartButton } from '@/features/cart/components/FloatingCartButton';
 
 export const StoreShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {

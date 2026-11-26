@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { Heart, Home, LayoutGrid, Search, Settings, ShoppingCart, UserPlus } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
 import { calculateCartSummary } from '@/lib/storeLogic';
-import { useAutoHideBars } from '@/lib/useAutoHideBars';
+import { useAutoHideBars } from '@/hooks/useAutoHideBars';
 import { BrandLogo } from './BrandLogo';
 import { CurrencySwitcher } from './CurrencySwitcher';
 
@@ -184,7 +184,6 @@ export const StoreHeader: React.FC = () => {
 
 export const MobileBottomNav: React.FC = () => {
   const { route, navigate, setSettingsOpen, t } = useStore();
-  const barsHidden = useAutoHideBars();
 
   const items = [
     { page: 'home' as const, label: t('nav.home'), icon: Home },
@@ -196,12 +195,7 @@ export const MobileBottomNav: React.FC = () => {
   return (
     <nav
       aria-label="Mobile navigation"
-      className={`lg:hidden fixed bottom-0 inset-x-0 z-30 glass-surface border-t border-neutral-200/80 px-2 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] flex items-center justify-around transition-[transform,opacity] will-change-transform ${
-        barsHidden
-          ? 'translate-y-[120%] opacity-0 pointer-events-none duration-200 ease-[cubic-bezier(0.4,0,1,1)]'
-          : 'translate-y-0 opacity-100 duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]'
-      }`}
-      inert={barsHidden ? true : undefined}
+      className="lg:hidden fixed bottom-0 inset-x-0 z-30 glass-surface border-t border-neutral-200/80 px-2 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] flex items-center justify-around"
     >
       {items.map((it) => {
         const Icon = it.icon;

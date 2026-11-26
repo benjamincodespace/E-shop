@@ -3,7 +3,7 @@
 import React from 'react';
 import { Check, Coins, Globe, Moon, Sun } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
-import { CURRENCIES, currencyRateLabel } from '@/lib/currency';
+import { CURRENCIES, currencyRateLabel } from '@/utils/currency';
 import { LANGUAGES } from '@/lib/i18n';
 import type { CurrencyCode } from '@/types/store';
 

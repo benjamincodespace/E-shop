@@ -91,6 +91,7 @@ func (s *StoreDB) EnsureIndexes(ctx context.Context) error {
 	// orders
 	if _, err := s.DB.Collection("orders").Indexes().CreateMany(ctx, []mongo.IndexModel{
 		{Keys: bson.D{{Key: "orderNumber", Value: 1}}, Options: options.Index().SetUnique(true)},
+		{Keys: bson.D{{Key: "idempotencyKey", Value: 1}}, Options: options.Index().SetUnique(true).SetSparse(true)},
 		{Keys: bson.D{{Key: "userId", Value: 1}, {Key: "createdAt", Value: -1}}},
 		{Keys: bson.D{{Key: "status", Value: 1}, {Key: "createdAt", Value: -1}}},
 		{Keys: bson.D{{Key: "userId", Value: 1}, {Key: "items.productId", Value: 1}, {Key: "status", Value: 1}}},
@@ -102,7 +103,10 @@ func (s *StoreDB) EnsureIndexes(ctx context.Context) error {
 	if _, err := s.DB.Collection("reviews").Indexes().CreateMany(ctx, []mongo.IndexModel{
 		{Keys: bson.D{{Key: "productId", Value: 1}, {Key: "userId", Value: 1}}, Options: options.Index().SetUnique(true)},
 		{Keys: bson.D{{Key: "productId", Value: 1}, {Key: "createdAt", Value: -1}}},
+		{Keys: bson.D{{Key: "productId", Value: 1}, {Key: "rating", Value: -1}}},
+		{Keys: bson.D{{Key: "productId", Value: 1}, {Key: "helpfulCount", Value: -1}}},
 		{Keys: bson.D{{Key: "userId", Value: 1}, {Key: "createdAt", Value: -1}}},
+		{Keys: bson.D{{Key: "reported", Value: 1}, {Key: "createdAt", Value: -1}}},
 	}); err != nil {
 		return err
 	}

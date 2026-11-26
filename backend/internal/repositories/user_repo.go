@@ -104,6 +104,33 @@ func (r *UserRepository) UpdateProfile(ctx context.Context, idHex, name, phone, 
 	return &u, nil
 }
 
+// SetDeliveryAddress saves or clears the optional profile delivery address.
+func (r *UserRepository) SetDeliveryAddress(ctx context.Context, idHex string, address *models.DeliveryAddress) (*models.User, error) {
+	oid, err := bson.ObjectIDFromHex(idHex)
+	if err != nil {
+		return nil, err
+	}
+	set := bson.M{"updatedAt": time.Now().UTC()}
+	update := bson.M{"$set": set}
+	if address != nil {
+		set["deliveryAddress"] = address
+	} else {
+		update["$unset"] = bson.M{"deliveryAddress": ""}
+	}
+	res := r.store.DB.Collection("users").FindOneAndUpdate(
+		ctx,
+		bson.M{"_id": oid},
+		update,
+		options.FindOneAndUpdate().SetReturnDocument(options.After),
+	)
+	var u models.User
+	if err := res.Decode(&u); err != nil {
+		return nil, err
+	}
+	u.HydrateIDs()
+	return &u, nil
+}
+
 func (r *UserRepository) SetResetCode(ctx context.Context, userID bson.ObjectID, code string, expiresAt time.Time) error {
 	_, err := r.store.DB.Collection("users").UpdateByID(ctx, userID, bson.M{
 		"$set": bson.M{"resetCode": code, "resetExpiresAt": expiresAt},
@@ -137,11 +164,13 @@ func (r *UserRepository) GetPurchasedProductIDs(ctx context.Context, userIDHex s
 
 	ids := make([]string, 0)
 	for cursor.Next(ctx) {
+		// $group returns the product id as an ObjectID, not a string; decoding
+		// it as a string failed silently and left this list always empty.
 		var row struct {
-			ID string `bson:"_id"`
+			ID bson.ObjectID `bson:"_id"`
 		}
-		if err := cursor.Decode(&row); err == nil && row.ID != "" {
-			ids = append(ids, row.ID)
+		if err := cursor.Decode(&row); err == nil && !row.ID.IsZero() {
+			ids = append(ids, row.ID.Hex())
 		}
 	}
 	return ids, nil

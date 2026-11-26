@@ -390,35 +390,54 @@ func (r *CatalogRepository) AdjustInventory(ctx context.Context, productIDHex, m
 		return nil, err
 	}
 
-	nextStock := value
-	if mode == "delta" {
-		nextStock = prod.Stock + value
-	}
-	if nextStock < 0 {
-		nextStock = 0
-	}
-	change := nextStock - prod.Stock
 	now := time.Now().UTC()
-
-	res := r.store.DB.Collection("products").FindOneAndUpdate(
-		ctx,
-		bson.M{"_id": oid},
-		bson.M{"$set": bson.M{"stock": nextStock, "updatedAt": now}},
-		options.FindOneAndUpdate().SetReturnDocument(options.After),
-	)
+	var res *mongo.SingleResult
+	if mode == "delta" {
+		// Apply the delta inside the database so a stale read can never overwrite
+		// stock sold by a concurrent checkout. The pipeline clamps stock at zero.
+		res = r.store.DB.Collection("products").FindOneAndUpdate(
+			ctx,
+			bson.M{"_id": oid},
+			mongo.Pipeline{
+				{{Key: "$set", Value: bson.M{
+					"stock":     bson.M{"$max": bson.A{0, bson.M{"$add": bson.A{"$stock", value}}}},
+					"updatedAt": now,
+				}}},
+			},
+			options.FindOneAndUpdate().SetReturnDocument(options.After),
+		)
+	} else {
+		nextStock := value
+		if nextStock < 0 {
+			nextStock = 0
+		}
+		res = r.store.DB.Collection("products").FindOneAndUpdate(
+			ctx,
+			bson.M{"_id": oid},
+			bson.M{"$set": bson.M{"stock": nextStock, "updatedAt": now}},
+			options.FindOneAndUpdate().SetReturnDocument(options.After),
+		)
+	}
 	var updated models.Product
 	if err := res.Decode(&updated); err != nil {
 		return nil, err
 	}
 	updated.HydrateIDs()
 
+	previous := prod.Stock
+	if mode == "delta" {
+		previous = updated.Stock - value
+		if previous < 0 {
+			previous = 0
+		}
+	}
 	_, _ = r.store.DB.Collection("inventory_logs").InsertOne(ctx, models.InventoryLog{
 		ID:            bson.NewObjectID(),
 		ProductID:     updated.ID,
 		ProductName:   updated.Name,
-		ChangeAmount:  change,
-		PreviousStock: prod.Stock,
-		NewStock:      nextStock,
+		ChangeAmount:  updated.Stock - previous,
+		PreviousStock: previous,
+		NewStock:      updated.Stock,
 		Reason:        reason,
 		ActorName:     actorName,
 		CreatedAt:     now,

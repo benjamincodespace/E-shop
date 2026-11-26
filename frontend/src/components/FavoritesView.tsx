@@ -3,7 +3,7 @@
 import React from 'react';
 import { Heart } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
-import { ProductCard } from './ProductCard';
+import { ProductCard } from '@/features/products/components/ProductCard';
 
 export const FavoritesView: React.FC = () => {
   const { products, wishlistIds, navigate } = useStore();

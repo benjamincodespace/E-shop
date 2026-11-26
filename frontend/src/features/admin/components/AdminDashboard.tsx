@@ -28,6 +28,7 @@ import {
 import { useStore } from '@/context/StoreContext';
 import { api } from '@/services/api';
 import type {
+  AdminReviewStats,
   AnalyticsData,
   InventoryLog,
   Order,
@@ -39,20 +40,47 @@ import type {
 } from '@/types/store';
 import { BrandLogo } from '@/components/BrandLogo';
 import type { CurrencyCode } from '@/types/store';
-import { CURRENCIES, formatCurrency, convertCurrency, roundForCurrency } from '@/lib/currency';
+import { CURRENCIES, formatCurrency, convertCurrency, roundForCurrency } from '@/utils/currency';
 import { SafeImage } from '@/components/SafeImage';
 import { computeWeightedRatingScore, getEffectivePrice, getStockBadgeInfo, slugifyProductName } from '@/lib/storeLogic';
-import { useAutoHideBars } from '@/lib/useAutoHideBars';
+import { useAutoHideBars } from '@/hooks/useAutoHideBars';
+import { AdminReviewsPanel } from './AdminReviewsPanel';
 
 type AdminTab = 'dashboard' | 'products' | 'orders' | 'customers' | 'reviews' | 'analytics' | 'settings';
 
-const STUDIO_PRESET_IMAGES = [
-  '/images/tee_black_classic_1795513062767.jpg',
-  '/images/tee_white_essential_1795513064080.jpg',
-  '/images/tee_charcoal_oversized_1795513063222.jpg',
-  '/images/tee_bone_minimal_1795513063679.jpg',
-  '/images/tee_graphite_sport_1795513064472.jpg',
-];
+const SEO_TITLE_SUFFIX = ' | E-shop All';
+const SEO_DESCRIPTION_MAX = 155;
+
+/** SEO title derived from the product name. */
+function buildSeoTitle(name: string): string {
+  const trimmed = name.trim();
+  return trimmed ? `${trimmed}${SEO_TITLE_SUFFIX}` : '';
+}
+
+function clampSeoDescription(value: string): string {
+  if (value.length <= SEO_DESCRIPTION_MAX) return value;
+  const clipped = value.slice(0, SEO_DESCRIPTION_MAX - 1);
+  const lastSpace = clipped.lastIndexOf(' ');
+  return `${(lastSpace > 80 ? clipped.slice(0, lastSpace) : clipped).trimEnd()}…`;
+}
+
+/** SEO description derived from the product description, with the name as backfill. */
+function buildSeoDescription(description: string, name: string): string {
+  const trimmedDesc = description.trim();
+  const trimmedName = name.trim();
+  if (!trimmedDesc) {
+    return trimmedName
+      ? clampSeoDescription(
+          `Shop the ${trimmedName} at E-shop All — heavyweight monochrome tees with verified reviews and fast shipping.`,
+        )
+      : '';
+  }
+  const base = trimmedDesc.replace(/\s+/g, ' ');
+  if (trimmedName && base.length < 70) {
+    return clampSeoDescription(`${base} Shop the ${trimmedName} at E-shop All.`);
+  }
+  return clampSeoDescription(base);
+}
 
 const ALL_SIZES: TeeSize[] = ['S', 'M', 'L', 'XL', 'XXL'];
 const ORDER_STATUSES: OrderStatus[] = ['Pending', 'Confirmed', 'Processing', 'Shipped', 'Delivered', 'Cancelled'];
@@ -82,8 +110,7 @@ export const AdminDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }
 
   const [tab, setTab] = useState<AdminTab>(() => resolveAdminTab(initialTab));
 
-  // Tuck the admin app bar and mobile bottom bar away while scrolling, then
-  // glide them back as soon as scrolling settles.
+  // Tuck the admin app bar away while scrolling down; it returns on scroll up.
   const barsHidden = useAutoHideBars();
   const [moreOpen, setMoreOpen] = useState(false);
 
@@ -106,6 +133,7 @@ export const AdminDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }
   const [orders, setOrders] = useState<Order[]>([]);
   const [customers, setCustomers] = useState<Array<User & { orderCount: number; totalSpent: number }>>([]);
   const [adminReviews, setAdminReviews] = useState<Review[]>([]);
+  const [adminReviewStats, setAdminReviewStats] = useState<AdminReviewStats | null>(null);
   const [settings, setSettings] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
 
@@ -149,7 +177,7 @@ export const AdminDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }
   };
 
   const [formCategoryId, setFormCategoryId] = useState<string>('');
-  const [formImages, setFormImages] = useState<string[]>([STUDIO_PRESET_IMAGES[0]]);
+  const [formImages, setFormImages] = useState<string[]>([]);
   const [formSizes, setFormSizes] = useState<TeeSize[]>(['S', 'M', 'L', 'XL']);
   const [formColorsText, setFormColorsText] = useState('Black:#111111, White:#FFFFFF');
   const [formStock, setFormStock] = useState('15');
@@ -158,6 +186,10 @@ export const AdminDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }
   const [formPublished, setFormPublished] = useState(true);
   const [formSeoTitle, setFormSeoTitle] = useState('');
   const [formSeoDesc, setFormSeoDesc] = useState('');
+  // Once the admin edits an SEO field by hand, the auto-generation stops
+  // touching it so their copy is never overwritten.
+  const [seoTitleManual, setSeoTitleManual] = useState(false);
+  const [seoDescManual, setSeoDescManual] = useState(false);
   const [uploadingImg, setUploadingImg] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [savingProduct, setSavingProduct] = useState(false);
@@ -182,6 +214,17 @@ export const AdminDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }
       body.style.paddingRight = previousPadding;
     };
   }, [overlayOpen]);
+
+  // Generate SEO metadata from the name and description as the admin types.
+  useEffect(() => {
+    if (!productModalOpen || seoTitleManual) return;
+    setFormSeoTitle(buildSeoTitle(formName));
+  }, [formName, productModalOpen, seoTitleManual]);
+
+  useEffect(() => {
+    if (!productModalOpen || seoDescManual) return;
+    setFormSeoDesc(buildSeoDescription(formDesc, formName));
+  }, [formDesc, formName, productModalOpen, seoDescManual]);
 
   useEffect(() => {
     if (!user || user.role !== 'admin') {
@@ -211,6 +254,7 @@ export const AdminDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }
       setOrders(ordRes.orders);
       setCustomers(custRes.customers);
       setAdminReviews(revRes.reviews);
+      setAdminReviewStats(revRes.stats);
       setSettings(setRes.settings);
     } catch (err) {
       notify(err instanceof Error ? err.message : 'Failed loading admin metrics.', 'error');
@@ -263,7 +307,7 @@ export const AdminDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }
     setFormDiscountPrice('');
     setFormCurrency(currency);
     setFormCategoryId(categories[0]?.id || '');
-    setFormImages([STUDIO_PRESET_IMAGES[0]]);
+    setFormImages([]);
     setFormSizes(['S', 'M', 'L', 'XL']);
     setFormColorsText('Black:#111111, White:#FFFFFF');
     setFormStock('20');
@@ -272,6 +316,8 @@ export const AdminDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }
     setFormPublished(true);
     setFormSeoTitle('');
     setFormSeoDesc('');
+    setSeoTitleManual(false);
+    setSeoDescManual(false);
     setProductModalOpen(true);
   };
 
@@ -283,7 +329,7 @@ export const AdminDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }
     setFormPrice(String(p.price));
     setFormDiscountPrice(p.discountPrice ? String(p.discountPrice) : '');
     setFormCategoryId(p.categoryId || categories[0]?.id || '');
-    setFormImages(p.images.length > 0 ? p.images : [STUDIO_PRESET_IMAGES[0]]);
+    setFormImages(p.images);
     setFormSizes(p.sizes);
     setFormColorsText(p.colors.map((c) => `${c.name}:${c.hex}`).join(', '));
     setFormStock(String(p.stock));
@@ -292,6 +338,13 @@ export const AdminDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }
     setFormPublished(p.published);
     setFormSeoTitle(p.seoTitle);
     setFormSeoDesc(p.seoDescription);
+    // Stored SEO that already matches the generated copy keeps following the
+    // name and description; custom copy is preserved instead.
+    setSeoTitleManual(Boolean(p.seoTitle.trim()) && p.seoTitle.trim() !== buildSeoTitle(p.name));
+    setSeoDescManual(
+      Boolean(p.seoDescription.trim()) &&
+        p.seoDescription.trim() !== buildSeoDescription(p.description, p.name),
+    );
     setProductModalOpen(true);
   };
 
@@ -313,12 +366,8 @@ export const AdminDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }
       const uploaded = await api.uploadProductImage(file, (percent) => {
         setUploadProgress(Math.min(100, Math.max(1, percent)));
       });
-      // The photo just uploaded becomes the primary image, and the bundled
-      // studio presets it replaces are dropped so the storefront actually shows it.
-      setFormImages((prev) => [
-        uploaded.url,
-        ...prev.filter((img) => img !== uploaded.url && !STUDIO_PRESET_IMAGES.includes(img)),
-      ]);
+      // The uploaded photo becomes the primary image and shows in the picker.
+      setFormImages((prev) => [uploaded.url, ...prev.filter((img) => img !== uploaded.url)]);
       notify('Image uploaded and ready to publish', 'success');
     } catch (err) {
       notify(err instanceof Error ? err.message : 'Image upload failed.', 'error');
@@ -368,8 +417,8 @@ export const AdminDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }
         featured: formFeatured,
         popular: formPopular,
         published: formPublished,
-        seoTitle: formSeoTitle.trim() || `${formName.trim()} | E-shop All`,
-        seoDescription: formSeoDesc.trim() || formDesc.trim().slice(0, 155),
+        seoTitle: formSeoTitle.trim() || buildSeoTitle(formName),
+        seoDescription: formSeoDesc.trim() || buildSeoDescription(formDesc, formName),
       };
 
       if (editingProduct) {
@@ -435,6 +484,16 @@ export const AdminDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }
       setSelectedCustomerOrders({ customer: c, orders: res.orders });
     } catch (err) {
       notify(err instanceof Error ? err.message : 'Could not load customer orders.', 'error');
+    }
+  };
+
+  const handleResolveReviewReports = async (reviewId: string) => {
+    try {
+      await api.resolveAdminReviewReports(reviewId);
+      notify('Reports dismissed', 'info');
+      await loadAdminData();
+    } catch (err) {
+      notify(err instanceof Error ? err.message : 'Could not dismiss reports.', 'error');
     }
   };
 
@@ -1361,41 +1420,13 @@ export const AdminDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }
 
           {/* REVIEWS TAB */}
           {tab === 'reviews' && (
-            <div className="space-y-3">
-              <h2 className="font-display text-base font-bold text-neutral-950">
-                Customer Reviews ({adminReviews.length})
-              </h2>
-              {adminReviews.map((rev) => (
-                <div key={rev.id} className="bg-white border border-neutral-200/80 rounded-2xl p-4 flex items-start justify-between gap-4">
-                  <div>
-                    <div className="flex items-center gap-2 text-xs">
-                      <span className="font-bold text-neutral-950">{rev.userName}</span>
-                      <span className="text-neutral-400">on</span>
-                      <span className="font-semibold text-neutral-800">{rev.productName}</span>
-                    </div>
-                    <div className="flex items-center gap-1 mt-1">
-                      {[1, 2, 3, 4, 5].map((s) => (
-                        <Star
-                          key={s}
-                          className={`w-3.5 h-3.5 ${
-                            s <= rev.rating ? 'fill-neutral-950 text-neutral-950' : 'text-neutral-300'
-                          }`}
-                        />
-                      ))}
-                    </div>
-                    <p className="mt-2 text-xs text-neutral-700">{rev.comment}</p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => handleDeleteAdminReview(rev.id)}
-                    aria-label={`Remove review by ${rev.userName}`}
-                    className="px-3 py-1.5 rounded-full border border-neutral-200 hover:border-neutral-950 text-xs font-semibold text-neutral-700 cursor-pointer shrink-0"
-                  >
-                    Remove
-                  </button>
-                </div>
-              ))}
-            </div>
+            <AdminReviewsPanel
+              reviews={adminReviews}
+              stats={adminReviewStats}
+              products={adminProducts}
+              onRemove={handleDeleteAdminReview}
+              onResolveReports={handleResolveReviewReports}
+            />
           )}
 
           {/* ANALYTICS TAB */}
@@ -1545,12 +1576,7 @@ export const AdminDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }
       {/* Mobile Admin Bottom Navigation */}
       <nav
         aria-label="Mobile Admin Navigation"
-        className={`lg:hidden fixed bottom-0 inset-x-0 z-30 glass-surface border-t border-neutral-200/80 px-2 py-2 flex items-center justify-around transition-[transform,opacity] will-change-transform ${
-          barsHidden
-            ? 'translate-y-[120%] opacity-0 pointer-events-none duration-200 ease-[cubic-bezier(0.4,0,1,1)]'
-            : 'translate-y-0 opacity-100 duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]'
-        }`}
-        inert={barsHidden}
+        className="lg:hidden fixed bottom-0 inset-x-0 z-30 glass-surface border-t border-neutral-200/80 px-2 py-2 flex items-center justify-around"
       >
         {moreOpen && (
           <div className="absolute bottom-full right-3 mb-2 w-48 rounded-2xl border border-neutral-200 bg-white p-1.5 shadow-[0_16px_40px_rgba(0,0,0,0.14)]">
@@ -1818,7 +1844,7 @@ export const AdminDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }
                 </select>
               </div>
 
-              {/* Cloudinary Signed Upload & Studio Presets */}
+              {/* Cloudinary image upload */}
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-xs font-semibold text-neutral-800">Product Images (Cloudinary)</span>
@@ -1862,10 +1888,19 @@ export const AdminDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }
                   </div>
                 )}
                 <div className="flex flex-wrap gap-2">
-                  {formImages.map((img, i) => (
-                    <div key={`${img}-${i}`} className="relative w-16 h-16 rounded-xl bg-neutral-100 overflow-hidden border border-neutral-200">
-                      <SafeImage src={img} alt={`Selected ${i + 1}`} className="w-full h-full object-cover" />
-                      {formImages.length > 1 && (
+                  {formImages.length === 0 ? (
+                    <div className="w-full rounded-xl border border-dashed border-neutral-300 bg-neutral-50 px-3 py-4 text-center">
+                      <p className="text-[11px] font-medium text-neutral-600">
+                        No image selected yet — upload a photo to publish this product.
+                      </p>
+                    </div>
+                  ) : (
+                    formImages.map((img, i) => (
+                      <div
+                        key={`${img}-${i}`}
+                        className="relative w-16 h-16 rounded-xl bg-neutral-100 overflow-hidden border border-neutral-200"
+                      >
+                        <SafeImage src={img} alt={`Selected ${i + 1}`} className="w-full h-full object-cover" />
                         <button
                           type="button"
                           onClick={() => setFormImages((prev) => prev.filter((_, idx) => idx !== i))}
@@ -1874,22 +1909,9 @@ export const AdminDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }
                         >
                           <X className="w-3 h-3" />
                         </button>
-                      )}
-                    </div>
-                  ))}
-                </div>
-                <div className="mt-2 flex items-center gap-1.5 flex-wrap">
-                  <span className="text-[11px] text-neutral-500">Studio presets:</span>
-                  {STUDIO_PRESET_IMAGES.map((preset, idx) => (
-                    <button
-                      key={preset}
-                      type="button"
-                      onClick={() => setFormImages((prev) => (prev.includes(preset) ? prev : [...prev, preset]))}
-                      className="text-[11px] px-2 py-0.5 rounded-full border border-neutral-200 hover:border-neutral-950 cursor-pointer"
-                    >
-                      + Studio {idx + 1}
-                    </button>
-                  ))}
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
 
@@ -1975,8 +1997,11 @@ export const AdminDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }
                     id="p-seo-title"
                     type="text"
                     value={formSeoTitle}
-                    onChange={(e) => setFormSeoTitle(e.target.value)}
-                    placeholder="Auto-generated if blank"
+                    onChange={(e) => {
+                      setFormSeoTitle(e.target.value);
+                      setSeoTitleManual(true);
+                    }}
+                    placeholder="Generated from the product name"
                     className="w-full rounded-xl border border-neutral-200 px-3 py-2 text-xs"
                   />
                 </div>
@@ -1988,12 +2013,19 @@ export const AdminDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }
                     id="p-seo-desc"
                     type="text"
                     value={formSeoDesc}
-                    onChange={(e) => setFormSeoDesc(e.target.value)}
-                    placeholder="Auto-generated if blank"
+                    onChange={(e) => {
+                      setFormSeoDesc(e.target.value);
+                      setSeoDescManual(true);
+                    }}
+                    placeholder="Generated from the description"
                     className="w-full rounded-xl border border-neutral-200 px-3 py-2 text-xs"
                   />
                 </div>
               </div>
+              <p className="text-[10px] text-neutral-500">
+                SEO title and description are generated from the product name and description as you type. Edit either
+                field to override them.
+              </p>
 
               <div className="pt-3 flex items-center justify-end gap-2.5">
                 <button

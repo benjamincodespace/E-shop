@@ -3,8 +3,9 @@
 import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
 
-const IDLE_REVEAL_MS = 220;
-const SCROLL_THRESHOLD = 6;
+// A scroll only flips the bar once it has moved this many pixels, so the tiny
+// position changes browsers emit during momentum scrolling cannot toggle it.
+const SCROLL_THRESHOLD = 10;
 const TOP_REVEAL_AT = 24;
 // Panes shorter than this share of the viewport are inner widgets (a cart
 // summary, an admin table) and must never hide the page chrome.
@@ -12,11 +13,10 @@ const PANE_MIN_RATIO = 0.5;
 
 type Subscriber = (hidden: boolean) => void;
 
-// One shared scroll state for every bar on the page, so the top app bar and the
-// bottom bar always move together instead of each owning a separate timer.
+// One shared state for every top app bar on the page, so reading it in more
+// than one component never starts competing listeners or timers.
 let hidden = false;
 let frame = 0;
-let idleTimer: ReturnType<typeof setTimeout> | null = null;
 let listening = false;
 // Each scroll container keeps its own last position, so scrolling a pane and
 // then the window does not trip the movement threshold.
@@ -29,16 +29,14 @@ function publish(next: boolean) {
   subscribers.forEach((subscriber) => subscriber(hidden));
 }
 
-function clearIdleTimer() {
-  if (idleTimer) {
-    clearTimeout(idleTimer);
-    idleTimer = null;
-  }
-}
-
-function reveal() {
-  clearIdleTimer();
-  publish(false);
+function claimFrame(delta: number) {
+  // Only the latest direction in a frame matters, and only one publish happens
+  // per frame, so a fast gesture slides the bar instead of flickering it.
+  if (frame) cancelAnimationFrame(frame);
+  frame = requestAnimationFrame(() => {
+    frame = 0;
+    publish(delta > 0);
+  });
 }
 
 function handleScroll(event: Event) {
@@ -51,40 +49,31 @@ function handleScroll(event: Event) {
   const key: EventTarget = element ?? window;
   const y = element ? element.scrollTop : window.scrollY;
 
-  // Any movement keeps the bars tucked away; once the user stops, the idle
-  // timer glides them back in.
-  clearIdleTimer();
-  idleTimer = setTimeout(() => {
-    idleTimer = null;
-    publish(false);
-  }, IDLE_REVEAL_MS);
-
+  // Near the top the app bar always stays visible.
   if (y <= TOP_REVEAL_AT) {
-    if (frame) {
-      cancelAnimationFrame(frame);
-      frame = 0;
-    }
     positions.set(key, y);
-    reveal();
+    if (hidden) publish(false);
     return;
   }
 
-  const last = positions.get(key) ?? y;
-  if (Math.abs(y - last) < SCROLL_THRESHOLD) return;
+  const last = positions.get(key);
+  if (last === undefined) {
+    positions.set(key, y);
+    return;
+  }
+
+  const delta = y - last;
+  if (Math.abs(delta) < SCROLL_THRESHOLD) return;
 
   positions.set(key, y);
-  if (frame) return;
-  frame = requestAnimationFrame(() => {
-    frame = 0;
-    publish(true);
-  });
+  claimFrame(delta);
 }
 
 function startListening() {
   if (listening || typeof window === 'undefined') return;
   listening = true;
   positions.clear();
-  // Returning to a page part-way down should not leave the bars stranded.
+  // Returning to a page part-way down should not leave the bar stranded.
   if (window.scrollY <= TOP_REVEAL_AT) publish(false);
   window.addEventListener('scroll', handleScroll, { capture: true, passive: true });
 }
@@ -98,13 +87,13 @@ function stopListening() {
     cancelAnimationFrame(frame);
     frame = 0;
   }
-  clearIdleTimer();
 }
 
 /**
- * Hides the top app bar and bottom bar while the page is scrolling and brings
- * them back as soon as scrolling settles (or the user reaches the top). Works
- * for window scrolling and full-height panes via a capture listener.
+ * Hides the top app bar while the page scrolls down and brings it straight back
+ * as soon as the user scrolls up or returns to the top. It intentionally stays
+ * hidden while the page is still, so the bar only returns on an upward scroll.
+ * Bottom navigation never uses this hook — it always remains visible.
  */
 export function useAutoHideBars(): boolean {
   const pathname = usePathname();
@@ -124,7 +113,7 @@ export function useAutoHideBars(): boolean {
   // scroll event fires to reveal it.
   useEffect(() => {
     positions.clear();
-    reveal();
+    publish(false);
   }, [pathname]);
 
   useEffect(() => {

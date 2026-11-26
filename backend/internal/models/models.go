@@ -1,6 +1,7 @@
 package models
 
 import (
+	"strings"
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -41,20 +42,51 @@ type TeeColorOption struct {
 	Hex  string `bson:"hex" json:"hex"`
 }
 
+// DeliveryAddress is an optional structured address used for a saved profile
+// address and the immutable snapshot stored with each order.
+type DeliveryAddress struct {
+	Country      string   `bson:"country" json:"country"`
+	City         string   `bson:"city" json:"city"`
+	District     string   `bson:"district,omitempty" json:"district,omitempty"`
+	Street       string   `bson:"street" json:"street"`
+	Building     string   `bson:"building,omitempty" json:"building,omitempty"`
+	Instructions string   `bson:"instructions,omitempty" json:"instructions,omitempty"`
+	Latitude     *float64 `bson:"latitude,omitempty" json:"latitude,omitempty"`
+	Longitude    *float64 `bson:"longitude,omitempty" json:"longitude,omitempty"`
+}
+
+// OneLine renders the address for compact display and legacy `address` fields.
+func (d *DeliveryAddress) OneLine() string {
+	if d == nil {
+		return ""
+	}
+	parts := make([]string, 0, 5)
+	for _, part := range []string{d.Street, d.Building, d.District, d.City, d.Country} {
+		if part = strings.TrimSpace(part); part != "" {
+			parts = append(parts, part)
+		}
+	}
+	return strings.Join(parts, ", ")
+}
+
 type User struct {
-	ID             bson.ObjectID `bson:"_id,omitempty" json:"-"`
-	IDHex          string        `bson:"-" json:"id"`
-	Name           string        `bson:"name" json:"name"`
-	Email          string        `bson:"email,omitempty" json:"email"`
-	PasswordHash   string        `bson:"passwordHash" json:"-"`
-	Phone          string        `bson:"phone" json:"phone"`
-	Address        string        `bson:"address" json:"address"`
-	Role           UserRole      `bson:"role" json:"role"`
-	Disabled       bool          `bson:"disabled" json:"disabled"`
-	ResetCode      string        `bson:"resetCode,omitempty" json:"-"`
-	ResetExpiresAt *time.Time    `bson:"resetExpiresAt,omitempty" json:"-"`
-	CreatedAt      time.Time     `bson:"createdAt" json:"createdAt"`
-	UpdatedAt      time.Time     `bson:"updatedAt" json:"updatedAt"`
+	ID           bson.ObjectID `bson:"_id,omitempty" json:"-"`
+	IDHex        string        `bson:"-" json:"id"`
+	Name         string        `bson:"name" json:"name"`
+	Email        string        `bson:"email,omitempty" json:"email"`
+	PasswordHash string        `bson:"passwordHash" json:"-"`
+	Phone        string        `bson:"phone" json:"phone"`
+	Address      string        `bson:"address" json:"address"`
+	// DeliveryAddress is only set when the customer chooses to save it.
+	DeliveryAddress *DeliveryAddress `bson:"deliveryAddress,omitempty" json:"deliveryAddress,omitempty"`
+	// Gender is optional and omitted for accounts created before it existed.
+	Gender         string     `bson:"gender,omitempty" json:"gender,omitempty"`
+	Role           UserRole   `bson:"role" json:"role"`
+	Disabled       bool       `bson:"disabled" json:"disabled"`
+	ResetCode      string     `bson:"resetCode,omitempty" json:"-"`
+	ResetExpiresAt *time.Time `bson:"resetExpiresAt,omitempty" json:"-"`
+	CreatedAt      time.Time  `bson:"createdAt" json:"createdAt"`
+	UpdatedAt      time.Time  `bson:"updatedAt" json:"updatedAt"`
 }
 
 type CustomerSummary struct {
@@ -115,46 +147,66 @@ type OrderItem struct {
 }
 
 type Order struct {
-	ID            bson.ObjectID `bson:"_id,omitempty" json:"-"`
-	IDHex         string        `bson:"-" json:"id"`
-	OrderNumber   string        `bson:"orderNumber" json:"orderNumber"`
+	ID          bson.ObjectID `bson:"_id,omitempty" json:"-"`
+	IDHex       string        `bson:"-" json:"id"`
+	OrderNumber string        `bson:"orderNumber" json:"orderNumber"`
 	// Nil for guest checkout orders, which carry no account.
 	UserID        *bson.ObjectID `bson:"userId,omitempty" json:"-"`
 	UserIDHex     string         `bson:"-" json:"userId"`
-	CustomerName  string        `bson:"customerName" json:"customerName"`
-	CustomerEmail string        `bson:"customerEmail,omitempty" json:"customerEmail,omitempty"`
-	Phone         string        `bson:"phone" json:"phone"`
-	Address       string        `bson:"address" json:"address"`
-	Notes         string        `bson:"notes" json:"notes"`
-	Currency      string        `bson:"currency,omitempty" json:"currency"`
-	Subtotal      float64       `bson:"subtotal" json:"subtotal"`
-	ShippingFee   float64       `bson:"shippingFee" json:"shippingFee"`
-	Total         float64       `bson:"total" json:"total"`
-	Status        OrderStatus   `bson:"status" json:"status"`
-	PaymentMethod string        `bson:"paymentMethod" json:"paymentMethod"`
-	Items         []OrderItem   `bson:"items" json:"items"`
-	CreatedAt     time.Time     `bson:"createdAt" json:"createdAt"`
-	UpdatedAt     time.Time     `bson:"updatedAt" json:"updatedAt"`
+	CustomerName  string         `bson:"customerName" json:"customerName"`
+	CustomerEmail string         `bson:"customerEmail,omitempty" json:"customerEmail,omitempty"`
+	Phone         string         `bson:"phone" json:"phone"`
+	Address       string         `bson:"address" json:"address"`
+	// DeliveryAddress preserves the structured delivery snapshot, including the
+	// confirmed pin, as it was at checkout time.
+	DeliveryAddress *DeliveryAddress `bson:"deliveryAddress,omitempty" json:"deliveryAddress,omitempty"`
+	Notes           string           `bson:"notes" json:"notes"`
+	Currency        string           `bson:"currency,omitempty" json:"currency"`
+	Subtotal        float64          `bson:"subtotal" json:"subtotal"`
+	ShippingFee     float64          `bson:"shippingFee" json:"shippingFee"`
+	Total           float64          `bson:"total" json:"total"`
+	Status          OrderStatus      `bson:"status" json:"status"`
+	PaymentMethod   string           `bson:"paymentMethod" json:"paymentMethod"`
+	// IdempotencyKey deduplicates a checkout that is retried after a network
+	// failure or double submit. It is deliberately never exposed in responses.
+	IdempotencyKey string      `bson:"idempotencyKey,omitempty" json:"-"`
+	Items          []OrderItem `bson:"items" json:"items"`
+	CreatedAt      time.Time   `bson:"createdAt" json:"createdAt"`
+	UpdatedAt      time.Time   `bson:"updatedAt" json:"updatedAt"`
 }
 
 type Review struct {
-	ID               bson.ObjectID   `bson:"_id,omitempty" json:"-"`
-	IDHex            string          `bson:"-" json:"id"`
-	ProductID        bson.ObjectID   `bson:"productId" json:"-"`
-	ProductIDHex     string          `bson:"-" json:"productId"`
-	ProductName      string          `bson:"productName,omitempty" json:"productName,omitempty"`
-	ProductSlug      string          `bson:"productSlug,omitempty" json:"productSlug,omitempty"`
-	UserID           bson.ObjectID   `bson:"userId" json:"-"`
-	UserIDHex        string          `bson:"-" json:"userId"`
-	UserName         string          `bson:"userName" json:"userName"`
-	Rating           int             `bson:"rating" json:"rating"`
-	Comment          string          `bson:"comment" json:"comment"`
-	HelpfulCount     int             `bson:"helpfulCount" json:"helpfulCount"`
-	LikedByUserIDs   []bson.ObjectID `bson:"likedByUserIds" json:"-"`
-	UserHasLiked     bool            `bson:"-" json:"userHasLiked"`
-	VerifiedPurchase bool            `bson:"verifiedPurchase" json:"verifiedPurchase"`
-	CreatedAt        time.Time       `bson:"createdAt" json:"createdAt"`
-	UpdatedAt        time.Time       `bson:"updatedAt" json:"updatedAt"`
+	ID                bson.ObjectID   `bson:"_id,omitempty" json:"-"`
+	IDHex             string          `bson:"-" json:"id"`
+	ProductID         bson.ObjectID   `bson:"productId" json:"-"`
+	ProductIDHex      string          `bson:"-" json:"productId"`
+	ProductName       string          `bson:"productName,omitempty" json:"productName,omitempty"`
+	ProductSlug       string          `bson:"productSlug,omitempty" json:"productSlug,omitempty"`
+	UserID            bson.ObjectID   `bson:"userId" json:"-"`
+	UserIDHex         string          `bson:"-" json:"userId"`
+	UserName          string          `bson:"userName" json:"userName"`
+	Rating            int             `bson:"rating" json:"rating"`
+	Comment           string          `bson:"comment" json:"comment"`
+	HelpfulCount      int             `bson:"helpfulCount" json:"helpfulCount"`
+	LikedByUserIDs    []bson.ObjectID `bson:"likedByUserIds" json:"-"`
+	UserHasLiked      bool            `bson:"-" json:"userHasLiked"`
+	VerifiedPurchase  bool            `bson:"verifiedPurchase" json:"verifiedPurchase"`
+	Reported          bool            `bson:"reported" json:"reported"`
+	ReportCount       int             `bson:"reportCount" json:"reportCount"`
+	ReportReasons     []string        `bson:"reportReasons,omitempty" json:"-"`
+	ReportedByUserIDs []bson.ObjectID `bson:"reportedByUserIds,omitempty" json:"-"`
+	UserHasReported   bool            `bson:"-" json:"userHasReported"`
+	CreatedAt         time.Time       `bson:"createdAt" json:"createdAt"`
+	UpdatedAt         time.Time       `bson:"updatedAt" json:"updatedAt"`
+}
+
+// AdminReviewStats is the moderation overview returned with the admin list.
+type AdminReviewStats struct {
+	Total     int               `json:"total"`
+	Average   float64           `json:"average"`
+	Reported  int               `json:"reported"`
+	Verified  int               `json:"verified"`
+	Breakdown []RatingBreakdown `json:"breakdown"`
 }
 
 type CartItemDoc struct {
@@ -301,10 +353,17 @@ func (r *Review) HydrateIDs(currentUserID *bson.ObjectID) {
 	r.ProductIDHex = r.ProductID.Hex()
 	r.UserIDHex = r.UserID.Hex()
 	r.UserHasLiked = false
+	r.UserHasReported = false
 	if currentUserID != nil {
 		for _, id := range r.LikedByUserIDs {
 			if id == *currentUserID {
 				r.UserHasLiked = true
+				break
+			}
+		}
+		for _, id := range r.ReportedByUserIDs {
+			if id == *currentUserID {
+				r.UserHasReported = true
 				break
 			}
 		}

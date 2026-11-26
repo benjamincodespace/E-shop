@@ -40,12 +40,15 @@ func WithCORS(cfg *config.Config, next http.Handler) http.Handler {
 				break
 			}
 		}
+		// Vary is required even for rejected origins so shared caches never serve
+		// one origin's CORS response to another.
+		w.Header().Add("Vary", "Origin")
 		if allowed {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Set("Access-Control-Allow-Credentials", "true")
-			w.Header().Set("Vary", "Origin")
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, Idempotency-Key")
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
+			w.Header().Set("Access-Control-Max-Age", "600")
 		}
 
 		if r.Method == http.MethodOptions {
@@ -59,7 +62,11 @@ func WithCORS(cfg *config.Config, next http.Handler) http.Handler {
 func WithSecurityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("X-Frame-Options", "DENY")
 		w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
+		w.Header().Set("X-Permitted-Cross-Domain-Policies", "none")
+		// Ignored on plain HTTP; enforced once the API is behind TLS.
+		w.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
 		next.ServeHTTP(w, r)
 	})
 }

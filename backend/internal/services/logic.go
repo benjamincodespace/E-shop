@@ -116,6 +116,28 @@ func CanTransitionOrderStatus(from, to models.OrderStatus) bool {
 	return false
 }
 
+// ClampText shortens text to at most max runes on a word boundary and appends
+// an ellipsis. It is rune-based so a multi-byte character is never split, which
+// the previous byte-slice truncation could do.
+func ClampText(text string, max int) string {
+	trimmed := strings.TrimSpace(text)
+	if max <= 0 {
+		return ""
+	}
+	runes := []rune(trimmed)
+	if len(runes) <= max {
+		return trimmed
+	}
+	cut := runes[:max-1]
+	for i := len(cut) - 1; i > 0; i-- {
+		if cut[i] == ' ' {
+			cut = cut[:i]
+			break
+		}
+	}
+	return strings.TrimRight(string(cut), " ,.;:!-") + "…"
+}
+
 func SlugifyProductName(input string) string {
 	s := strings.ToLower(strings.TrimSpace(input))
 	s = nonSlugChars.ReplaceAllString(s, "")

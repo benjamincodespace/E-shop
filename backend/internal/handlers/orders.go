@@ -2,7 +2,9 @@ package handlers
 
 import (
 	"errors"
+	"log"
 	"net/http"
+	"regexp"
 	"strings"
 
 	"github.com/teestore/backend/internal/middleware"
@@ -16,6 +18,70 @@ type OrderHandler struct {
 
 func NewOrderHandler(orderRepo *repositories.OrderRepository) *OrderHandler {
 	return &OrderHandler{orderRepo: orderRepo}
+}
+
+const (
+	maxCheckoutLines   = 50
+	maxLineQuantity    = 100
+	maxCustomerNameLen = 120
+	maxPhoneLen        = 32
+	maxAddressLen      = 500
+	maxNotesLen        = 500
+)
+
+var idempotencyKeyPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{8,64}$`)
+
+// normalizeCheckoutItems trims and bounds every line, merges duplicate
+// size/color lines, and keeps hostile quantities out of the transaction.
+func normalizeCheckoutItems(items []repositories.CheckoutLineInput) ([]repositories.CheckoutLineInput, string) {
+	if len(items) == 0 {
+		return nil, "Your cart is empty."
+	}
+	if len(items) > maxCheckoutLines {
+		return nil, "Please split this into smaller orders."
+	}
+	out := make([]repositories.CheckoutLineInput, 0, len(items))
+	index := make(map[string]int, len(items))
+	for _, it := range items {
+		id := strings.TrimSpace(it.ProductID)
+		if id == "" {
+			return nil, "An order item is missing its product."
+		}
+		size := strings.TrimSpace(it.Size)
+		if size == "" {
+			size = "M"
+		}
+		color := strings.TrimSpace(it.Color)
+		if color == "" {
+			color = "Black"
+		}
+		if len(size) > 24 || len(color) > 60 {
+			return nil, "An order item has an invalid size or color."
+		}
+		if it.Quantity < 1 {
+			return nil, "Item quantities must be at least 1."
+		}
+		if it.Quantity > maxLineQuantity {
+			return nil, "Item quantity is too large for one order."
+		}
+		key := id + "|" + strings.ToLower(size) + "|" + strings.ToLower(color)
+		if pos, ok := index[key]; ok {
+			merged := out[pos].Quantity + it.Quantity
+			if merged > maxLineQuantity {
+				merged = maxLineQuantity
+			}
+			out[pos].Quantity = merged
+			continue
+		}
+		index[key] = len(out)
+		out = append(out, repositories.CheckoutLineInput{
+			ProductID: id,
+			Size:      size,
+			Color:     color,
+			Quantity:  it.Quantity,
+		})
+	}
+	return out, ""
 }
 
 func (h *OrderHandler) GetCart(w http.ResponseWriter, r *http.Request) {
@@ -180,16 +246,25 @@ func (h *OrderHandler) CreateOrder(w http.ResponseWriter, r *http.Request) {
 		userID, customerEmail = claims.Sub, claims.Email
 	}
 	var body struct {
-		CustomerName  string                           `json:"customerName"`
-		Phone         string                           `json:"phone"`
-		Address       string                           `json:"address"`
-		Notes         string                           `json:"notes"`
-		PaymentMethod string                           `json:"paymentMethod"`
-		Currency      string                           `json:"currency"`
-		Items         []repositories.CheckoutLineInput `json:"items"`
+		CustomerName    string                           `json:"customerName"`
+		Phone           string                           `json:"phone"`
+		Address         string                           `json:"address"`
+		DeliveryAddress *models.DeliveryAddress          `json:"deliveryAddress"`
+		Notes           string                           `json:"notes"`
+		PaymentMethod   string                           `json:"paymentMethod"`
+		Currency        string                           `json:"currency"`
+		Items           []repositories.CheckoutLineInput `json:"items"`
 	}
 	if err := DecodeJSON(r, &body); err != nil {
 		WriteError(w, http.StatusBadRequest, "Invalid checkout request.")
+		return
+	}
+
+	// An optional idempotency key lets the client retry a checkout without
+	// creating a second order. Clients that omit it keep working as before.
+	idempotencyKey := strings.TrimSpace(r.Header.Get("Idempotency-Key"))
+	if idempotencyKey != "" && !idempotencyKeyPattern.MatchString(idempotencyKey) {
+		WriteError(w, http.StatusBadRequest, "Invalid Idempotency-Key header.")
 		return
 	}
 
@@ -205,29 +280,65 @@ func (h *OrderHandler) CreateOrder(w http.ResponseWriter, r *http.Request) {
 		WriteError(w, http.StatusBadRequest, "Customer full name is required.")
 		return
 	}
+	if len(name) > maxCustomerNameLen {
+		WriteError(w, http.StatusBadRequest, "Customer name is too long.")
+		return
+	}
 	if len(phone) < 6 {
 		WriteError(w, http.StatusBadRequest, "Valid phone number is required.")
 		return
+	}
+	if len(phone) > maxPhoneLen {
+		WriteError(w, http.StatusBadRequest, "Phone number is too long.")
+		return
+	}
+	if len(pm) > 60 {
+		WriteError(w, http.StatusBadRequest, "Invalid payment method.")
+		return
+	}
+	deliveryAddress, addressErr := normalizeDeliveryAddress(body.DeliveryAddress)
+	if addressErr != "" {
+		WriteError(w, http.StatusBadRequest, addressErr)
+		return
+	}
+	if deliveryAddress != nil {
+		// The structured address is what the customer reviewed; the one-line
+		// form is kept on the order for legacy display and search.
+		if composed := deliveryAddress.OneLine(); composed != "" {
+			addr = composed
+		}
 	}
 	if len(addr) < 5 {
 		WriteError(w, http.StatusBadRequest, "Delivery address is required.")
 		return
 	}
-	if len(body.Items) == 0 {
-		WriteError(w, http.StatusBadRequest, "Your cart is empty.")
+	if len(addr) > maxAddressLen {
+		WriteError(w, http.StatusBadRequest, "Delivery address is too long.")
+		return
+	}
+	notes := strings.TrimSpace(body.Notes)
+	if len([]rune(notes)) > maxNotesLen {
+		WriteError(w, http.StatusBadRequest, "Order notes are too long.")
+		return
+	}
+	items, itemsErr := normalizeCheckoutItems(body.Items)
+	if itemsErr != "" {
+		WriteError(w, http.StatusBadRequest, itemsErr)
 		return
 	}
 
 	order, err := h.orderRepo.PlaceOrderAtomic(r.Context(), repositories.CheckoutInput{
-		UserID:        userID,
-		CustomerEmail: customerEmail,
-		CustomerName:  name,
-		Phone:         phone,
-		Address:       addr,
-		Notes:         strings.TrimSpace(body.Notes),
-		PaymentMethod: pm,
-		Currency:      body.Currency,
-		Items:         body.Items,
+		UserID:          userID,
+		CustomerEmail:   customerEmail,
+		CustomerName:    name,
+		Phone:           phone,
+		Address:         addr,
+		DeliveryAddress: deliveryAddress,
+		Notes:           notes,
+		PaymentMethod:   pm,
+		Currency:        body.Currency,
+		IdempotencyKey:  idempotencyKey,
+		Items:           items,
 	})
 	if err != nil {
 		if errors.Is(err, repositories.ErrInsufficientStock) {
@@ -238,6 +349,7 @@ func (h *OrderHandler) CreateOrder(w http.ResponseWriter, r *http.Request) {
 			WriteError(w, http.StatusBadRequest, "One or more cart items are no longer available.")
 			return
 		}
+		log.Printf("create order failed: %v", err)
 		WriteError(w, http.StatusInternalServerError, "Failed to place order.")
 		return
 	}

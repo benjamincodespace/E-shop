@@ -104,16 +104,23 @@ func (h *CatalogHandler) GetProductBySlug(w http.ResponseWriter, r *http.Request
 	if claims != nil {
 		userHex = claims.Sub
 	}
-	reviews, ratingSummary, err := h.reviewRepo.ListByProduct(r.Context(), prod.IDHex, userHex)
+	reviews, ratingSummary, pagination, err := h.reviewRepo.ListByProduct(r.Context(), repositories.ReviewQuery{
+		ProductIDHex:   prod.IDHex,
+		CurrentUserHex: userHex,
+		Sort:           r.URL.Query().Get("reviewSort"),
+		Page:           1,
+		Limit:          5,
+	})
 	if err != nil {
 		WriteError(w, http.StatusInternalServerError, "Failed to load reviews.")
 		return
 	}
 
 	WriteJSON(w, http.StatusOK, map[string]interface{}{
-		"product":       prod,
-		"reviews":       reviews,
-		"ratingSummary": ratingSummary,
+		"product":          prod,
+		"reviews":          reviews,
+		"ratingSummary":    ratingSummary,
+		"reviewPagination": pagination,
 	})
 }
 
@@ -184,13 +191,22 @@ func (h *CatalogHandler) CreateProduct(w http.ResponseWriter, r *http.Request) {
 	if len(imgs) == 0 {
 		imgs = []string{"/images/tee_black_classic_1795513062767.jpg"}
 	}
+	if len(imgs) > 8 {
+		imgs = imgs[:8]
+	}
 	sizes := body.Sizes
 	if len(sizes) == 0 {
 		sizes = []string{"S", "M", "L", "XL"}
 	}
+	if len(sizes) > 10 {
+		sizes = sizes[:10]
+	}
 	colors := body.Colors
 	if len(colors) == 0 {
 		colors = []models.TeeColorOption{{Name: "Black", Hex: "#111111"}}
+	}
+	if len(colors) > 20 {
+		colors = colors[:20]
 	}
 	published := true
 	if body.Published != nil {
@@ -211,11 +227,7 @@ func (h *CatalogHandler) CreateProduct(w http.ResponseWriter, r *http.Request) {
 	}
 	seoDesc := strings.TrimSpace(body.SEODescription)
 	if seoDesc == "" {
-		if len(desc) > 155 {
-			seoDesc = desc[:155]
-		} else {
-			seoDesc = desc
-		}
+		seoDesc = services.ClampText(desc, 155)
 	}
 
 	currency := services.NormalizeCurrency(body.Currency)
@@ -313,6 +325,9 @@ func (h *CatalogHandler) UpdateProduct(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if len(clean) > 0 {
+			if len(clean) > 8 {
+				clean = clean[:8]
+			}
 			imgs = clean
 		}
 	}
@@ -320,9 +335,15 @@ func (h *CatalogHandler) UpdateProduct(w http.ResponseWriter, r *http.Request) {
 	if len(body.Sizes) > 0 {
 		sizes = body.Sizes
 	}
+	if len(sizes) > 10 {
+		sizes = sizes[:10]
+	}
 	colors := existing.Colors
 	if len(body.Colors) > 0 {
 		colors = body.Colors
+	}
+	if len(colors) > 20 {
+		colors = colors[:20]
 	}
 	published := existing.Published
 	if body.Published != nil {

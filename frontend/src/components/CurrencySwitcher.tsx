@@ -3,7 +3,7 @@
 import React from 'react';
 import { ChevronDown } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
-import { CURRENCIES, currencyRateLabel } from '@/lib/currency';
+import { CURRENCIES, currencyRateLabel } from '@/utils/currency';
 import type { CurrencyCode } from '@/types/store';
 
 interface CurrencySwitcherProps {

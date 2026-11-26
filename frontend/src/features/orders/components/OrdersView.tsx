@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { ArrowLeft, PackageSearch } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
 import { api } from '@/services/api';
-import { formatCurrency } from '@/lib/currency';
+import { formatCurrency } from '@/utils/currency';
 import type { Order } from '@/types/store';
 
 function useMyOrders(enabled: boolean) {
@@ -194,7 +194,27 @@ export const OrderDetailView: React.FC<{ orderId: string }> = ({ orderId }) => {
             </div>
           </div>
 
-          <p className="mt-4 text-[11px] text-neutral-500">Delivering to: {order.address}</p>
+          <div className="mt-4 pt-3 border-t border-neutral-200 space-y-1.5 text-[11px] text-neutral-600">
+            <p>
+              <span className="font-semibold text-neutral-900">Delivering to:</span> {order.address}
+            </p>
+            {order.deliveryAddress?.instructions && (
+              <p>
+                <span className="font-semibold text-neutral-900">Delivery instructions:</span>{' '}
+                {order.deliveryAddress.instructions}
+              </p>
+            )}
+            {order.deliveryAddress?.latitude != null && order.deliveryAddress?.longitude != null && (
+              <p className="font-mono-num">
+                Pin: {order.deliveryAddress.latitude.toFixed(5)}, {order.deliveryAddress.longitude.toFixed(5)}
+              </p>
+            )}
+            {order.notes && (
+              <p>
+                <span className="font-semibold text-neutral-900">Order notes:</span> {order.notes}
+              </p>
+            )}
+          </div>
         </div>
       )}
     </div>

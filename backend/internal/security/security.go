@@ -1,6 +1,8 @@
 package security
 
 import (
+	"crypto/sha256"
+	"crypto/subtle"
 	"errors"
 	"net/http"
 	"net/url"
@@ -40,6 +42,14 @@ func VerifyPassword(password, hash string) bool {
 		return false
 	}
 	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) == nil
+}
+
+// ConstantTimeEqual compares secrets such as passcodes and reset codes without
+// leaking their length or content through timing.
+func ConstantTimeEqual(a, b string) bool {
+	aSum := sha256.Sum256([]byte(a))
+	bSum := sha256.Sum256([]byte(b))
+	return subtle.ConstantTimeCompare(aSum[:], bSum[:]) == 1
 }
 
 func SignToken(user *models.User, secret string, tokenType string, ttl time.Duration) (string, error) {
@@ -166,7 +176,12 @@ func VerifyCSRF(r *http.Request, allowedOrigins []string) bool {
 
 func SanitizeImageURL(raw string) string {
 	trimmed := strings.TrimSpace(raw)
-	if trimmed == "" {
+	if trimmed == "" || len(trimmed) > 2048 {
+		return ""
+	}
+	// Reject control characters and markup so the stored value cannot break out
+	// of an attribute or a JSON document downstream.
+	if strings.ContainsAny(trimmed, "\r\n\t\"'<>` ") {
 		return ""
 	}
 	if strings.HasPrefix(trimmed, "/images/") || strings.HasPrefix(trimmed, "/uploads/") {

@@ -1,5 +1,5 @@
 import type { MetadataRoute } from 'next';
-import { getSiteOrigin } from '@/lib/serverCatalog';
+import { getSiteOrigin } from '@/features/products/services/catalog.service';
 
 export default function robots(): MetadataRoute.Robots {
   const origin = getSiteOrigin();

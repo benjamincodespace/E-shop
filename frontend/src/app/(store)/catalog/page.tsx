@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
-import { CatalogView } from '@/components/CatalogView';
-import { fetchServerCategories, fetchServerProducts } from '@/lib/serverCatalog';
+import { CatalogView } from '@/features/products/components/CatalogView';
+import { fetchServerCategories, fetchServerProducts } from '@/features/products/services/catalog.service';
 
 export const revalidate = 30;
 

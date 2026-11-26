@@ -1,11 +1,11 @@
 'use client';
 
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { api, setAuthToken } from '@/services/api';
-import type { CartItem, Category, CurrencyCode, Product, TeeSize, User } from '@/types/store';
+import type { CartItem, Category, CurrencyCode, DeliveryAddress, Product, TeeSize, User } from '@/types/store';
 import { getEffectivePrice } from '@/lib/storeLogic';
-import { CURRENCY_STORAGE_KEY, convertCurrency, isCurrencyCode, normalizeCurrency } from '@/lib/currency';
+import { CURRENCY_STORAGE_KEY, convertCurrency, isCurrencyCode, normalizeCurrency } from '@/utils/currency';
 import { LANGUAGE_STORAGE_KEY, normalizeLanguage, translate } from '@/lib/i18n';
 import type { LanguageCode, TranslationKey } from '@/lib/i18n';
 
@@ -116,7 +116,9 @@ interface StoreContextValue {
   clearCartLocal: () => void;
   toggleWishlist: (product: Product) => Promise<void>;
   loginUser: (email: string, password: string) => Promise<User>;
-  registerUser: (phone: string, password: string) => Promise<User>;
+  registerUser: (phone: string, password: string, gender?: string) => Promise<User>;
+  /** Saves or clears the customer's address; only used on explicit opt-in. */
+  updateDeliveryAddress: (address: DeliveryAddress | null) => Promise<void>;
   loginShopper: (phone: string, password: string) => Promise<User>;
   claimAdminAccount: (payload: {
     name: string;
@@ -158,6 +160,9 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const [user, setUser] = useState<User | null>(null);
   const [authReady, setAuthReady] = useState(false);
+  // Set as soon as a server-rendered page hands us its catalogue, so the first
+  // client render does not refetch the same products and categories.
+  const catalogFromServerRef = useRef(false);
   const [categories, setCategories] = useState<Category[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [productsLoading, setProductsLoading] = useState(true);
@@ -276,6 +281,9 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const hydrateInitialCatalog = useCallback(
     (initialCats: Category[], initialProds: Product[]) => {
+      if (initialCats.length > 0 || initialProds.length > 0) {
+        catalogFromServerRef.current = true;
+      }
       if (initialCats.length > 0 && categories.length === 0) {
         setCategories(initialCats);
       }
@@ -317,8 +325,12 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   }, []);
 
   useEffect(() => {
-    refreshCatalog();
     refreshAuth();
+    // A server-rendered page has already supplied the catalogue; only fetch it
+    // again when this page did not (admin, account and checkout routes).
+    if (!catalogFromServerRef.current) {
+      refreshCatalog();
+    }
   }, [refreshCatalog, refreshAuth]);
 
   const [storageReady, setStorageReady] = useState(false);
@@ -417,7 +429,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         );
       });
     },
-    [notify],
+    [],
   );
 
   const removeFromCart = useCallback(
@@ -457,8 +469,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   }, []);
 
   // Shopper sign-up: phone number + password only, then signed in immediately.
-  const registerUser = useCallback(async (phone: string, password: string) => {
-    const res = await api.register({ phone, password });
+  const registerUser = useCallback(async (phone: string, password: string, gender?: string) => {
+    const res = await api.register({ phone, password, gender });
     setAuthToken(res.token);
     setUser(res.user);
     return res.user;
@@ -480,6 +492,11 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     },
     [],
   );
+
+  const updateDeliveryAddress = useCallback(async (address: DeliveryAddress | null) => {
+    const res = address ? await api.saveDeliveryAddress(address) : await api.clearDeliveryAddress();
+    setUser(res.user);
+  }, []);
 
   const logoutUser = useCallback(async () => {
     await api.logout();
@@ -529,6 +546,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         toggleWishlist,
         loginUser,
         registerUser,
+        updateDeliveryAddress,
         loginShopper,
         claimAdminAccount,
         logoutUser,

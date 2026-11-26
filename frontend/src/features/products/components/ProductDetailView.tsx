@@ -17,8 +17,9 @@ import { api } from '@/services/api';
 import { calculateDiscountPercent, getEffectivePrice, getStockBadgeInfo } from '@/lib/storeLogic';
 import { useStore } from '@/context/StoreContext';
 import { flyProductImageToCart } from '@/features/cart/lib/cartFlight';
-import { formatPrice } from '@/lib/currency';
+import { formatPrice } from '@/utils/currency';
 import { SafeImage } from '@/components/SafeImage';
+import { ProductReviews } from './ProductReviews';
 
 interface RatingSummary {
   average: number;
@@ -413,119 +414,14 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
         )}
 
         {activeTab === 'reviews' && (
-          <div className="py-6 grid grid-cols-1 lg:grid-cols-12 gap-8">
-            {/* Rating Breakdown */}
-            <div className="lg:col-span-4 bg-neutral-50 border border-neutral-200/80 rounded-2xl p-6 h-fit">
-              <div className="flex items-end gap-3">
-                <span className="font-display text-5xl font-bold text-neutral-950 tabular-nums leading-none">
-                  {ratingSummary.average > 0 ? ratingSummary.average.toFixed(1) : '0.0'}
-                </span>
-                <div>
-                  <div className="flex items-center gap-0.5">
-                    {[1, 2, 3, 4, 5].map((s) => (
-                      <Star
-                        key={s}
-                        className={`w-4 h-4 ${
-                          s <= Math.round(ratingSummary.average)
-                            ? 'fill-neutral-950 text-neutral-950'
-                            : 'text-neutral-300'
-                        }`}
-                      />
-                    ))}
-                  </div>
-                  <p className="text-xs text-neutral-500 mt-1 tabular-nums">
-                    ({ratingSummary.total} verified reviews)
-                  </p>
-                </div>
-              </div>
-
-              <div className="mt-5 space-y-2">
-                {ratingSummary.breakdown.map((row) => (
-                  <div key={row.stars} className="flex items-center gap-2.5 text-xs">
-                    <span className="w-7 font-medium text-neutral-700 tabular-nums">{row.stars} ★</span>
-                    <div className="flex-1 h-2 bg-neutral-200 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-neutral-950 rounded-full transition-all"
-                        style={{ width: `${row.percentage}%` }}
-                      />
-                    </div>
-                    <span className="w-9 text-right text-neutral-500 tabular-nums">{row.percentage}%</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Reviews List */}
-            <div className="lg:col-span-8 space-y-6">
-              <div className="bg-white border border-neutral-200 rounded-2xl p-5">
-                <h3 className="font-display text-sm font-bold text-neutral-950">Verified Buyer Reviews</h3>
-                <p className="mt-2 text-xs text-neutral-500">
-                  These reviews come from customers whose orders included <strong>{product.name}</strong>. Checkout is
-                  guest-only, so new reviews are not being collected at the moment.
-                </p>
-              </div>
-
-              {reviews.length === 0 ? (
-                <div className="text-center py-10 bg-neutral-50 rounded-2xl border border-neutral-200/70">
-                  <p className="text-sm font-medium text-neutral-700">No reviews yet</p>
-                  <p className="text-xs text-neutral-500 mt-1">Verified buyer feedback will appear here.</p>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {reviews.map((rev) => {
-                    return (
-                      <article
-                        key={rev.id}
-                        className="bg-white border border-neutral-200/80 rounded-2xl p-5"
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="flex items-center gap-3">
-                            <div className="w-9 h-9 rounded-full bg-neutral-200 text-neutral-800 text-xs font-bold flex items-center justify-center">
-                              {rev.userName.charAt(0).toUpperCase()}
-                            </div>
-                            <div>
-                              <div className="flex items-center gap-2">
-                                <span className="text-sm font-semibold text-neutral-950">{rev.userName}</span>
-                                {rev.verifiedPurchase && (
-                                  <span className="inline-flex items-center gap-1 text-[11px] font-medium text-neutral-600">
-                                    <ShieldCheck className="w-3.5 h-3.5 text-neutral-950" />
-                                    Verified Buyer
-                                  </span>
-                                )}
-                              </div>
-                              <div className="flex items-center gap-1 mt-0.5">
-                                {[1, 2, 3, 4, 5].map((s) => (
-                                  <Star
-                                    key={s}
-                                    className={`w-3.5 h-3.5 ${
-                                      s <= rev.rating ? 'fill-neutral-950 text-neutral-950' : 'text-neutral-300'
-                                    }`}
-                                  />
-                                ))}
-                              </div>
-                            </div>
-                          </div>
-
-                          <span className="text-xs text-neutral-400">
-                            {new Date(rev.createdAt).toLocaleDateString()}
-                          </span>
-                        </div>
-
-                        <p className="mt-3 text-sm text-neutral-700 leading-relaxed">{rev.comment}</p>
-
-                        <div className="mt-4 flex items-center justify-between pt-3 border-t border-neutral-100">
-                          <span className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1 rounded-full border bg-white text-neutral-600 border-neutral-200">
-                            <ThumbsUp className="w-3.5 h-3.5" />
-                            <span>Helpful ({rev.helpfulCount})</span>
-                          </span>
-                        </div>
-                      </article>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          </div>
+          <ProductReviews
+            key={product.id}
+            productId={product.id}
+            productName={product.name}
+            initialReviews={reviews}
+            initialRatingSummary={ratingSummary}
+            onSummaryChange={setRatingSummary}
+          />
         )}
       </div>
     </div>

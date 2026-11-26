@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { formatCurrency } from '@/lib/currency';
+import { formatCurrency } from '@/utils/currency';
 import type { Order } from '@/types/store';
 
 interface OrderConfirmedProps {

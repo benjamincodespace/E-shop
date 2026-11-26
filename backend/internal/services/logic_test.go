@@ -1,6 +1,7 @@
 package services
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/teestore/backend/internal/models"
@@ -53,6 +54,37 @@ func TestOrderStatusTransitions(t *testing.T) {
 	}
 	if CanTransitionOrderStatus(models.OrderDelivered, models.OrderCancelled) {
 		t.Fatal("expected Delivered -> Cancelled to be forbidden")
+	}
+}
+
+func TestClampText(t *testing.T) {
+	if got := ClampText("Soft cotton tee", 40); got != "Soft cotton tee" {
+		t.Fatalf("short text should pass through, got %q", got)
+	}
+	long := "Heavyweight 300gsm organic cotton tee with an enzyme wash finish and a relaxed studio drape for everyday wear."
+	got := ClampText(long, 80)
+	if len([]rune(got)) > 80 {
+		t.Fatalf("clamped text exceeded the rune limit: %q", got)
+	}
+	if got[len(got)-len("…"):] != "…" {
+		t.Fatalf("clamped text should end with an ellipsis, got %q", got)
+	}
+	// Multi-byte characters must never be split in half.
+	multi := "T-shirt élégant — coton biologique très doux pour tous les jours"
+	if clipped := ClampText(multi, 25); len([]rune(clipped)) > 25 || strings.ContainsRune(clipped, '\uFFFD') {
+		t.Fatalf("unexpected multi-byte clamp: %q", clipped)
+	}
+}
+
+func TestOrderStatusTransitionEdgeCases(t *testing.T) {
+	if !CanTransitionOrderStatus(models.OrderDelivered, models.OrderDelivered) {
+		t.Fatal("same-status updates should be allowed as no-ops")
+	}
+	if CanTransitionOrderStatus(models.OrderStatus("Refunded"), models.OrderCancelled) {
+		t.Fatal("unknown statuses must not transition")
+	}
+	if CanTransitionOrderStatus(models.OrderCancelled, models.OrderPending) {
+		t.Fatal("cancelled orders must stay cancelled")
 	}
 }
 

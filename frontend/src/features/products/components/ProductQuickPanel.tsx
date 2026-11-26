@@ -7,7 +7,7 @@ import { calculateDiscountPercent, getEffectivePrice } from '@/lib/storeLogic';
 import { api } from '@/services/api';
 import { useStore } from '@/context/StoreContext';
 import { flyProductImageToCart } from '@/features/cart/lib/cartFlight';
-import { formatPrice } from '@/lib/currency';
+import { formatPrice } from '@/utils/currency';
 import { SafeImage } from '@/components/SafeImage';
 
 interface ProductQuickPanelProps {

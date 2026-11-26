@@ -15,12 +15,12 @@ import {
 } from 'lucide-react';
 import type { Category, Product } from '@/types/store';
 import { useStore } from '@/context/StoreContext';
-import { ProductCard } from './ProductCard';
+import { ProductCard } from '@/features/products/components/ProductCard';
 import { ProductCardSkeleton } from './ProductCardSkeleton';
-import { ProductQuickPanel } from './ProductQuickPanel';
+import { ProductQuickPanel } from '@/features/products/components/ProductQuickPanel';
 import { SafeImage } from './SafeImage';
 import { filterAndSortProducts } from '@/lib/storeLogic';
-import { formatPrice } from '@/lib/currency';
+import { formatPrice } from '@/utils/currency';
 
 const HERO_SLIDES = [
   {

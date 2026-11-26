@@ -48,6 +48,7 @@ export const SafeImage: React.FC<SafeImageProps> = ({ src, alt, className = '', 
       sizes={isCloudinary ? '(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw' : undefined}
       alt={alt}
       loading={eager ? 'eager' : 'lazy'}
+      decoding="async"
       referrerPolicy="no-referrer"
       onError={() => setFailed(true)}
       className={className}

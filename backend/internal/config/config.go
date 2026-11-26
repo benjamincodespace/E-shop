@@ -4,7 +4,9 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"os"
+	"regexp"
 	"strings"
 
 	"github.com/joho/godotenv"
@@ -118,4 +120,38 @@ func (c *Config) IsProduction() bool {
 
 func (c *Config) CloudinaryConfigured() bool {
 	return c.CloudinaryCloudName != "" && c.CloudinaryAPIKey != "" && c.CloudinaryAPISecret != ""
+}
+
+// Cloudinary cloud names are 2-128 letters, digits or hyphens starting with a
+// letter. A brand or product name in this variable ("T-shirt") passes Go's
+// config load but is rejected by Cloudinary with "Invalid cloud_name".
+var cloudNamePattern = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9-]{1,127}$`)
+
+// CloudinaryConfigIssue returns a human-readable explanation when image uploads
+// cannot work, or an empty string when configuration looks usable. It never
+// includes the API key or secret.
+func (c *Config) CloudinaryConfigIssue() string {
+	set := 0
+	if c.CloudinaryCloudName != "" {
+		set++
+	}
+	if c.CloudinaryAPIKey != "" {
+		set++
+	}
+	if c.CloudinaryAPISecret != "" {
+		set++
+	}
+	switch {
+	case set == 0:
+		return "not configured: product image uploads are disabled"
+	case set < 3:
+		return "partially configured: set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY and CLOUDINARY_API_SECRET together"
+	case !cloudNamePattern.MatchString(c.CloudinaryCloudName):
+		return fmt.Sprintf(
+			"CLOUDINARY_CLOUD_NAME %q is not a valid cloud name (letters, digits or hyphens, starting with a letter); copy the Cloud name from the Cloudinary console",
+			c.CloudinaryCloudName,
+		)
+	default:
+		return ""
+	}
 }

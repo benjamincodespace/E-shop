@@ -2,12 +2,16 @@ import type {
   AnalyticsData,
   Category,
   InventoryLog,
+  DeliveryAddress,
   Order,
   OrderStatus,
   PriceRangeKey,
   Product,
   Review,
+  ReviewPage,
+  ReviewSort,
   SortOption,
+  AdminReviewStats,
   User,
 } from '@/types/store';
 import { prepareImageForUpload, uploadToCloudinary } from '@/lib/imageUpload';
@@ -115,7 +119,7 @@ export const api = {
       body: JSON.stringify(payload),
     }),
   // Shopper sign-up: a phone number and password are all that is required.
-  register: (payload: { phone: string; password: string; name?: string; email?: string; address?: string }) =>
+  register: (payload: { phone: string; password: string; name?: string; email?: string; address?: string; gender?: string }) =>
     apiRequest<{ user: User; token: string; purchasedProductIds: string[] }>('/api/auth/register', {
       method: 'POST',
       body: JSON.stringify(payload),
@@ -129,6 +133,19 @@ export const api = {
   logout: () => apiRequest<{ ok: boolean }>('/api/auth/logout', { method: 'POST' }),
   session: () =>
     apiRequest<{ authenticated: boolean; user: User | null; purchasedProductIds: string[] }>('/api/auth/session'),
+
+  // Approximate country from the API edge for the signup dial-code default.
+  getGeoCountry: () =>
+    apiRequest<{ countryCode: string; city: string; region: string; source: string }>('/api/geo'),
+
+  // Explicit opt-in save/clear of the customer's delivery address.
+  saveDeliveryAddress: (deliveryAddress: DeliveryAddress) =>
+    apiRequest<{ user: User }>('/api/auth/delivery-address', {
+      method: 'PUT',
+      body: JSON.stringify({ deliveryAddress }),
+    }),
+  clearDeliveryAddress: () =>
+    apiRequest<{ user: User }>('/api/auth/delivery-address', { method: 'DELETE' }),
 
   // Catalog & Products
   getCategories: () => apiRequest<{ categories: Category[] }>('/api/categories'),
@@ -163,40 +180,71 @@ export const api = {
     apiRequest<{
       product: Product;
       reviews: Review[];
-      ratingSummary: {
-        average: number;
-        total: number;
-        breakdown: Array<{ stars: number; count: number; percentage: number }>;
-      };
+      ratingSummary: ReviewPage['ratingSummary'];
+      reviewPagination?: ReviewPage['pagination'];
     }>(`/api/products/${encodeURIComponent(slug)}`),
 
   // Orders
-  createOrder: (payload: {
-    customerName: string;
-    phone: string;
-    address: string;
-    notes: string;
-    paymentMethod: string;
-    currency?: string;
-    items: Array<{ productId: string; size: string; color: string; quantity: number }>;
-  }) =>
+  createOrder: (
+    payload: {
+      customerName: string;
+      phone: string;
+      address: string;
+      deliveryAddress?: DeliveryAddress;
+      notes: string;
+      paymentMethod: string;
+      currency?: string;
+      items: Array<{ productId: string; size: string; color: string; quantity: number }>;
+    },
+    idempotencyKey?: string,
+  ) =>
     apiRequest<{ order: Order }>('/api/orders', {
       method: 'POST',
+      // The server returns the original order when this key was already used.
+      headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined,
       body: JSON.stringify(payload),
     }),
 
   getMyOrders: () => apiRequest<{ orders: Order[] }>('/api/orders/my-orders'),
 
   // Reviews
-  getProductReviews: (productId: string) =>
-    apiRequest<{
-      reviews: Review[];
-      ratingSummary: {
-        average: number;
-        total: number;
-        breakdown: Array<{ stars: number; count: number; percentage: number }>;
-      };
-    }>(`/api/products/${encodeURIComponent(productId)}/reviews`),
+  getProductReviews: (
+    productId: string,
+    params?: { page?: number; limit?: number; sort?: ReviewSort; rating?: number },
+  ) => {
+    const qs = new URLSearchParams();
+    if (params?.page) qs.set('page', String(params.page));
+    if (params?.limit) qs.set('limit', String(params.limit));
+    if (params?.sort) qs.set('sort', params.sort);
+    if (params?.rating) qs.set('rating', String(params.rating));
+    const query = qs.toString();
+    return apiRequest<ReviewPage>(
+      `/api/products/${encodeURIComponent(productId)}/reviews${query ? `?${query}` : ''}`,
+    );
+  },
+  getMyReviews: () => apiRequest<{ reviews: Review[] }>('/api/reviews/my-reviews'),
+  createReview: (productId: string, payload: { rating: number; comment?: string }) =>
+    apiRequest<{ review: Review; created: boolean }>(
+      `/api/products/${encodeURIComponent(productId)}/reviews`,
+      { method: 'POST', body: JSON.stringify(payload) },
+    ),
+  updateReview: (reviewId: string, payload: { rating: number; comment?: string }) =>
+    apiRequest<{ review: Review }>(`/api/reviews/${encodeURIComponent(reviewId)}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    }),
+  deleteReview: (reviewId: string) =>
+    apiRequest<{ ok: boolean }>(`/api/reviews/${encodeURIComponent(reviewId)}`, { method: 'DELETE' }),
+  toggleReviewHelpful: (reviewId: string) =>
+    apiRequest<{ liked: boolean; helpfulCount: number }>(
+      `/api/reviews/${encodeURIComponent(reviewId)}/like`,
+      { method: 'POST' },
+    ),
+  reportReview: (reviewId: string, reason: string) =>
+    apiRequest<{ review: Review; reported: boolean }>(
+      `/api/reviews/${encodeURIComponent(reviewId)}/report`,
+      { method: 'POST', body: JSON.stringify({ reason }) },
+    ),
 
   // Newsletter
   subscribeNewsletter: (email: string) =>
@@ -293,9 +341,22 @@ export const api = {
     apiRequest<{ customer: User }>(`/api/admin/customers/${encodeURIComponent(customerId)}/toggle-disabled`, {
       method: 'PUT',
     }),
-  getAdminReviews: () => apiRequest<{ reviews: Review[] }>('/api/admin/reviews'),
+  getAdminReviews: (params?: { productId?: string; rating?: number }) => {
+    const qs = new URLSearchParams();
+    if (params?.productId) qs.set('productId', params.productId);
+    if (params?.rating) qs.set('rating', String(params.rating));
+    const query = qs.toString();
+    return apiRequest<{ reviews: Review[]; stats: AdminReviewStats }>(
+      `/api/admin/reviews${query ? `?${query}` : ''}`,
+    );
+  },
   deleteAdminReview: (reviewId: string) =>
     apiRequest<{ ok: boolean }>(`/api/admin/reviews/${encodeURIComponent(reviewId)}`, { method: 'DELETE' }),
+  resolveAdminReviewReports: (reviewId: string) =>
+    apiRequest<{ ok: boolean }>(
+      `/api/admin/reviews/${encodeURIComponent(reviewId)}/resolve-reports`,
+      { method: 'POST' },
+    ),
   getSettings: () => apiRequest<{ settings: Record<string, string> }>('/api/admin/settings'),
   updateSettings: (settings: Record<string, string>) =>
     apiRequest<{ settings: Record<string, string> }>('/api/admin/settings', {

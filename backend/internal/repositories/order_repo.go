@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -45,10 +46,38 @@ func (r *OrderRepository) GetCartItems(ctx context.Context, userIDHex string) ([
 	}
 
 	items := make([]models.CartItemDTO, 0, len(docs))
+	if len(docs) == 0 {
+		return items, nil
+	}
+
+	// Fetch every cart product in one query instead of one lookup per line.
+	productIDs := make([]bson.ObjectID, 0, len(docs))
 	for _, d := range docs {
-		var prod models.Product
-		err := r.store.DB.Collection("products").FindOne(ctx, bson.M{"_id": d.ProductID, "published": true}).Decode(&prod)
-		if err != nil {
+		productIDs = append(productIDs, d.ProductID)
+	}
+	prodCur, err := r.store.DB.Collection("products").Find(ctx, bson.M{
+		"_id":       bson.M{"$in": productIDs},
+		"published": true,
+	})
+	if err != nil {
+		return nil, err
+	}
+	defer prodCur.Close(ctx)
+	products := make(map[bson.ObjectID]models.Product, len(productIDs))
+	for prodCur.Next(ctx) {
+		var p models.Product
+		if err := prodCur.Decode(&p); err != nil {
+			continue
+		}
+		products[p.ID] = p
+	}
+	if err := prodCur.Err(); err != nil {
+		return nil, err
+	}
+
+	for _, d := range docs {
+		prod, ok := products[d.ProductID]
+		if !ok {
 			continue
 		}
 		img := "/images/tee_black_classic_1795513062767.jpg"
@@ -261,10 +290,15 @@ type CheckoutInput struct {
 	CustomerName  string
 	Phone         string
 	Address       string
-	Notes         string
-	PaymentMethod string
-	Currency      string
-	Items         []CheckoutLineInput
+	// DeliveryAddress is the validated, structured snapshot from checkout.
+	DeliveryAddress *models.DeliveryAddress
+	Notes           string
+	PaymentMethod   string
+	Currency        string
+	// IdempotencyKey deduplicates a retried checkout. Empty disables dedupe,
+	// which keeps older clients working unchanged.
+	IdempotencyKey string
+	Items          []CheckoutLineInput
 }
 
 // PlaceOrderAtomic uses a MongoDB multi-document ACID transaction + conditional stock decrement
@@ -281,6 +315,12 @@ func (r *OrderRepository) PlaceOrderAtomic(ctx context.Context, in CheckoutInput
 	}
 
 	orderCurrency := services.NormalizeCurrency(in.Currency)
+	idempotencyKey := strings.TrimSpace(in.IdempotencyKey)
+	if idempotencyKey != "" {
+		if existing, lookupErr := r.findOrderByIdempotencyKey(ctx, idempotencyKey, uid, in.Phone); lookupErr == nil && existing != nil {
+			return existing, nil
+		}
+	}
 
 	session, err := r.store.Client.StartSession()
 	if err != nil {
@@ -377,23 +417,25 @@ func (r *OrderRepository) PlaceOrderAtomic(ctx context.Context, in CheckoutInput
 		shippingFee, total := services.CalculateShippingAndTotalForCurrency(subtotal, orderCurrency)
 
 		order := models.Order{
-			ID:            bson.NewObjectID(),
-			OrderNumber:   orderNumber,
-			UserID:        uid,
-			CustomerName:  in.CustomerName,
-			CustomerEmail: in.CustomerEmail,
-			Phone:         in.Phone,
-			Address:       in.Address,
-			Notes:         in.Notes,
-			Currency:      orderCurrency,
-			Subtotal:      subtotal,
-			ShippingFee:   shippingFee,
-			Total:         total,
-			Status:        models.OrderPending,
-			PaymentMethod: in.PaymentMethod,
-			Items:         orderItems,
-			CreatedAt:     now,
-			UpdatedAt:     now,
+			ID:              bson.NewObjectID(),
+			OrderNumber:     orderNumber,
+			UserID:          uid,
+			CustomerName:    in.CustomerName,
+			CustomerEmail:   in.CustomerEmail,
+			Phone:           in.Phone,
+			Address:         in.Address,
+			DeliveryAddress: in.DeliveryAddress,
+			Notes:           in.Notes,
+			Currency:        orderCurrency,
+			Subtotal:        subtotal,
+			ShippingFee:     shippingFee,
+			Total:           total,
+			Status:          models.OrderPending,
+			PaymentMethod:   in.PaymentMethod,
+			IdempotencyKey:  idempotencyKey,
+			Items:           orderItems,
+			CreatedAt:       now,
+			UpdatedAt:       now,
 		}
 
 		if _, err := r.store.DB.Collection("orders").InsertOne(sessCtx, order); err != nil {
@@ -415,9 +457,38 @@ func (r *OrderRepository) PlaceOrderAtomic(ctx context.Context, in CheckoutInput
 	})
 
 	if err != nil {
+		// A concurrent request with the same key can win the unique-index race;
+		// this transaction then rolls back, leaving exactly one order behind.
+		if idempotencyKey != "" {
+			if existing, lookupErr := r.findOrderByIdempotencyKey(ctx, idempotencyKey, uid, in.Phone); lookupErr == nil && existing != nil {
+				return existing, nil
+			}
+		}
 		return nil, err
 	}
 	return res.(*models.Order), nil
+}
+
+// findOrderByIdempotencyKey returns the order created by an earlier request
+// with this key. The lookup is scoped to the same account (or the same guest
+// phone) so a guessed key can never expose another shopper's order.
+func (r *OrderRepository) findOrderByIdempotencyKey(ctx context.Context, key string, userID *bson.ObjectID, phone string) (*models.Order, error) {
+	filter := bson.M{"idempotencyKey": key}
+	if userID != nil {
+		filter["userId"] = *userID
+	} else if phone != "" {
+		filter["phone"] = phone
+	}
+	var existing models.Order
+	err := r.store.DB.Collection("orders").FindOne(ctx, filter).Decode(&existing)
+	if errors.Is(err, mongo.ErrNoDocuments) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	existing.HydrateIDs()
+	return &existing, nil
 }
 
 func (r *OrderRepository) ListOrdersByUser(ctx context.Context, userIDHex string) ([]models.Order, error) {
@@ -449,28 +520,32 @@ func (r *OrderRepository) ListAdminOrders(ctx context.Context, status, search st
 	if status != "" && status != "All" {
 		filter["status"] = status
 	}
+	// Search in the database so the API does not download every order and
+	// filter it in memory. QuoteMeta keeps user input from becoming a regex.
+	if q := strings.TrimSpace(search); q != "" {
+		pattern := bson.M{"$regex": regexp.QuoteMeta(q), "$options": "i"}
+		filter["$or"] = bson.A{
+			bson.M{"orderNumber": pattern},
+			bson.M{"customerName": pattern},
+			bson.M{"customerEmail": pattern},
+			bson.M{"phone": pattern},
+		}
+	}
 	cur, err := r.store.DB.Collection("orders").Find(ctx, filter, options.Find().SetSort(bson.D{{Key: "createdAt", Value: -1}}))
 	if err != nil {
 		return nil, err
 	}
 	defer cur.Close(ctx)
 
-	var all []models.Order
-	if err := cur.All(ctx, &all); err != nil {
+	var out []models.Order
+	if err := cur.All(ctx, &out); err != nil {
 		return nil, err
 	}
-
-	q := strings.ToLower(strings.TrimSpace(search))
-	out := make([]models.Order, 0, len(all))
-	for i := range all {
-		all[i].HydrateIDs()
-		if q != "" {
-			hay := strings.ToLower(all[i].OrderNumber + " " + all[i].CustomerName + " " + all[i].CustomerEmail + " " + all[i].Phone)
-			if !strings.Contains(hay, q) {
-				continue
-			}
-		}
-		out = append(out, all[i])
+	for i := range out {
+		out[i].HydrateIDs()
+	}
+	if out == nil {
+		out = []models.Order{}
 	}
 	return out, nil
 }
@@ -498,13 +573,18 @@ func (r *OrderRepository) UpdateOrderStatusAtomic(ctx context.Context, orderIDHe
 		}
 
 		now := time.Now().UTC()
+		// The current status is part of the filter so two concurrent updates
+		// cannot both pass the transition check and restock the same order twice.
 		var updated models.Order
 		err := r.store.DB.Collection("orders").FindOneAndUpdate(
 			sessCtx,
-			bson.M{"_id": oid},
+			bson.M{"_id": oid, "status": current.Status},
 			bson.M{"$set": bson.M{"status": nextStatus, "updatedAt": now}},
 			options.FindOneAndUpdate().SetReturnDocument(options.After),
 		).Decode(&updated)
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return nil, fmt.Errorf("%w: order state changed while updating", ErrInvalidTransition)
+		}
 		if err != nil {
 			return nil, err
 		}

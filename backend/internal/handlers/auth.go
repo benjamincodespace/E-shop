@@ -7,6 +7,7 @@ import (
 	"math/big"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/teestore/backend/internal/config"
@@ -23,6 +24,28 @@ type AuthHandler struct {
 
 func NewAuthHandler(cfg *config.Config, userRepo *repositories.UserRepository) *AuthHandler {
 	return &AuthHandler{cfg: cfg, userRepo: userRepo}
+}
+
+var (
+	timingHashOnce sync.Once
+	timingHash     string
+)
+
+// timingDummyHash returns a real bcrypt hash so a sign-in for an unknown
+// account costs the same as a wrong password and cannot be detected by timing.
+func timingDummyHash() string {
+	timingHashOnce.Do(func() {
+		if hash, err := security.HashPassword("timing-equalizer-not-a-password"); err == nil {
+			timingHash = hash
+		}
+	})
+	return timingHash
+}
+
+// noStore keeps authenticated responses out of shared and browser caches.
+func noStore(w http.ResponseWriter) {
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Pragma", "no-cache")
 }
 
 // normalizePhone keeps a leading "+" and digits so numbers are stored and
@@ -46,6 +69,23 @@ func normalizePhone(raw string) string {
 		return ""
 	}
 	return normalized
+}
+
+// normalizeGender returns the canonical stored value and whether the input is
+// acceptable. An empty selection is valid: gender is never required.
+func normalizeGender(raw string) (string, bool) {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "":
+		return "", true
+	case "male", "m":
+		return "male", true
+	case "female", "f":
+		return "female", true
+	case "prefer_not_to_say", "prefer-not-to-say", "prefer not to say", "unspecified":
+		return "prefer_not_to_say", true
+	default:
+		return "", false
+	}
 }
 
 func validPhone(phone string) bool {
@@ -84,6 +124,7 @@ func (h *AuthHandler) signSessionCookies(w http.ResponseWriter, r *http.Request,
 }
 
 func (h *AuthHandler) issueAuthResponse(w http.ResponseWriter, r *http.Request, status int, user *models.User, purchased []string) {
+	noStore(w)
 	access, ok := h.signSessionCookies(w, r, user)
 	if !ok {
 		return
@@ -203,6 +244,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		Password string `json:"password"`
 		Phone    string `json:"phone"`
 		Address  string `json:"address"`
+		Gender   string `json:"gender"`
 	}
 	if err := DecodeJSON(r, &body); err != nil {
 		WriteError(w, http.StatusBadRequest, "Invalid registration payload.")
@@ -225,6 +267,11 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	}
 	if email != "" && !strings.Contains(email, "@") {
 		WriteError(w, http.StatusBadRequest, "Please enter a valid email address.")
+		return
+	}
+	gender, ok := normalizeGender(body.Gender)
+	if !ok {
+		WriteError(w, http.StatusBadRequest, "Gender must be male, female, or prefer not to say.")
 		return
 	}
 
@@ -263,6 +310,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		PasswordHash: hash,
 		Phone:        phone,
 		Address:      strings.TrimSpace(body.Address),
+		Gender:       gender,
 		Role:         models.RoleCustomer,
 	}
 	if err := h.userRepo.CreateUser(r.Context(), user); err != nil {
@@ -300,8 +348,13 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		WriteError(w, http.StatusInternalServerError, "Sign-in lookup failed.")
 		return
 	}
+	if user == nil {
+		// Burn the same bcrypt cost as a real check so response timing does not
+		// reveal whether an account exists.
+		_ = security.VerifyPassword(body.Password, timingDummyHash())
+	}
 
-	if portal == "admin" && h.cfg.AdminPasscode != "" && body.Password == h.cfg.AdminPasscode {
+	if portal == "admin" && h.cfg.AdminPasscode != "" && security.ConstantTimeEqual(body.Password, h.cfg.AdminPasscode) {
 		if user != nil && user.Role == models.RoleAdmin {
 			if user.Disabled {
 				WriteError(w, http.StatusForbidden, "This account has been disabled.")
@@ -312,6 +365,10 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if user == nil {
+			if !strings.Contains(email, "@") {
+				WriteError(w, http.StatusBadRequest, "Enter the administrator email address for this account.")
+				return
+			}
 			hash, _ := security.HashPassword(body.Password)
 			created := &models.User{
 				Name:         "Store Admin",
@@ -346,6 +403,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
+	noStore(w)
 	if !security.VerifyCSRF(r, h.cfg.FrontendOrigins) {
 		WriteError(w, http.StatusForbidden, "Invalid request origin.")
 		return
@@ -372,11 +430,13 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
+	noStore(w)
 	security.ClearSessionCookies(w, r, h.cfg.IsProduction())
 	WriteJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
 func (h *AuthHandler) Session(w http.ResponseWriter, r *http.Request) {
+	noStore(w)
 	extraCookiesNeeded := false
 	var user *models.User
 
@@ -422,6 +482,7 @@ func (h *AuthHandler) Session(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
+	noStore(w)
 	claims := middleware.GetUserClaims(r.Context())
 	user, err := h.userRepo.FindByID(r.Context(), claims.Sub)
 	if err != nil || user == nil || user.Disabled {
@@ -437,6 +498,7 @@ func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *AuthHandler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
+	noStore(w)
 	claims := middleware.GetUserClaims(r.Context())
 	var body struct {
 		Name    string `json:"name"`
@@ -465,6 +527,47 @@ func (h *AuthHandler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 	user, err := h.userRepo.UpdateProfile(r.Context(), claims.Sub, name, phone, strings.TrimSpace(body.Address))
 	if err != nil {
 		WriteError(w, http.StatusInternalServerError, "Failed to update profile.")
+		return
+	}
+	WriteJSON(w, http.StatusOK, map[string]interface{}{"user": user})
+}
+
+// SaveDeliveryAddress stores the address a signed-in customer explicitly chose
+// to keep. It never touches their name, phone or any other profile field.
+func (h *AuthHandler) SaveDeliveryAddress(w http.ResponseWriter, r *http.Request) {
+	noStore(w)
+	claims := middleware.GetUserClaims(r.Context())
+	var body struct {
+		DeliveryAddress *models.DeliveryAddress `json:"deliveryAddress"`
+	}
+	if err := DecodeJSON(r, &body); err != nil {
+		WriteError(w, http.StatusBadRequest, "Invalid delivery address payload.")
+		return
+	}
+	address, message := normalizeDeliveryAddress(body.DeliveryAddress)
+	if message != "" {
+		WriteError(w, http.StatusBadRequest, message)
+		return
+	}
+	if address == nil {
+		WriteError(w, http.StatusBadRequest, "Delivery address is required.")
+		return
+	}
+	user, err := h.userRepo.SetDeliveryAddress(r.Context(), claims.Sub, address)
+	if err != nil {
+		WriteError(w, http.StatusInternalServerError, "Failed to save delivery address.")
+		return
+	}
+	WriteJSON(w, http.StatusOK, map[string]interface{}{"user": user})
+}
+
+// ClearDeliveryAddress removes the saved address from the profile.
+func (h *AuthHandler) ClearDeliveryAddress(w http.ResponseWriter, r *http.Request) {
+	noStore(w)
+	claims := middleware.GetUserClaims(r.Context())
+	user, err := h.userRepo.SetDeliveryAddress(r.Context(), claims.Sub, nil)
+	if err != nil {
+		WriteError(w, http.StatusInternalServerError, "Failed to clear delivery address.")
 		return
 	}
 	WriteJSON(w, http.StatusOK, map[string]interface{}{"user": user})
@@ -523,7 +626,7 @@ func (h *AuthHandler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 	}
 
 	user, _ := h.findByIdentifier(r.Context(), identifier)
-	if user == nil || user.ResetCode == "" || user.ResetCode != code {
+	if user == nil || user.ResetCode == "" || !security.ConstantTimeEqual(user.ResetCode, code) {
 		WriteError(w, http.StatusBadRequest, "Invalid reset code.")
 		return
 	}

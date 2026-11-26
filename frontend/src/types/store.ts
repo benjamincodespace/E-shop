@@ -2,6 +2,8 @@ export type CurrencyCode = 'USD' | 'EUR' | 'ZAR' | 'KES' | 'TZS' | 'UGX' | 'RWF'
 
 export type UserRole = 'customer' | 'admin';
 
+export type Gender = 'male' | 'female' | 'prefer_not_to_say';
+
 export type OrderStatus =
   | 'Pending'
   | 'Confirmed'
@@ -17,12 +19,28 @@ export interface TeeColorOption {
   hex: string;
 }
 
+export interface DeliveryAddress {
+  country: string;
+  city: string;
+  district?: string;
+  street: string;
+  building?: string;
+  instructions?: string;
+  /** Present only when the customer captured a GPS pin. */
+  latitude?: number;
+  longitude?: number;
+}
+
 export interface User {
   id: string;
   name: string;
   email: string;
   phone: string;
   address: string;
+  /** Saved only when the customer explicitly chose to keep it. */
+  deliveryAddress?: DeliveryAddress | null;
+  /** Optional; older accounts have no gender value. */
+  gender?: Gender | '';
   role: UserRole;
   disabled: boolean;
   createdAt: string;
@@ -77,8 +95,46 @@ export interface Review {
   helpfulCount: number;
   userHasLiked?: boolean;
   verifiedPurchase: boolean;
+  reported?: boolean;
+  reportCount?: number;
+  userHasReported?: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface RatingBreakdownRow {
+  stars: number;
+  count: number;
+  percentage: number;
+}
+
+export interface RatingSummary {
+  average: number;
+  total: number;
+  breakdown: RatingBreakdownRow[];
+}
+
+export interface Pagination {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
+
+export type ReviewSort = 'newest' | 'oldest' | 'highest' | 'lowest' | 'helpful';
+
+export interface ReviewPage {
+  reviews: Review[];
+  ratingSummary: RatingSummary;
+  pagination: Pagination;
+}
+
+export interface AdminReviewStats {
+  total: number;
+  average: number;
+  reported: number;
+  verified: number;
+  breakdown: RatingBreakdownRow[];
 }
 
 export interface CartItem {
@@ -115,6 +171,8 @@ export interface Order {
   customerEmail?: string;
   phone: string;
   address: string;
+  /** Immutable snapshot of the confirmed delivery details. */
+  deliveryAddress?: DeliveryAddress | null;
   notes: string;
   currency: CurrencyCode;
   subtotal: number;

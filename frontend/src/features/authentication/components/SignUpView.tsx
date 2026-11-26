@@ -1,17 +1,23 @@
 'use client';
 
 import React, { useState } from 'react';
-import { ArrowRight, Eye, EyeOff, Lock, Phone, ShoppingBag } from 'lucide-react';
+import { ArrowRight, Eye, EyeOff, Lock, ShoppingBag } from 'lucide-react';
+import { isValidPhoneNumber } from 'libphonenumber-js/min';
 import { useStore } from '@/context/StoreContext';
-import { isValidPhoneNumber } from '@/validations/contact';
+import type { Gender } from '@/types/store';
+import { PhoneInput } from './PhoneInput';
+import { GenderSelect } from './GenderSelect';
+import { useDetectedCountry } from '../hooks/useDetectedCountry';
 
 type Mode = 'signup' | 'signin';
 
 export const SignUpView: React.FC = () => {
   const { user, registerUser, loginShopper, navigate } = useStore();
+  const detected = useDetectedCountry();
 
   const [mode, setMode] = useState<Mode>('signup');
   const [phone, setPhone] = useState('');
+  const [gender, setGender] = useState<Gender | ''>('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -21,8 +27,8 @@ export const SignUpView: React.FC = () => {
     e.preventDefault();
     setError('');
 
-    if (!isValidPhoneNumber(phone)) {
-      setError('Enter your phone number with the country code, for example +1 555 010 0000.');
+    if (!phone || !isValidPhoneNumber(phone)) {
+      setError('Enter a valid phone number for the selected country.');
       return;
     }
     if (password.length < 6) {
@@ -33,9 +39,9 @@ export const SignUpView: React.FC = () => {
     setSubmitting(true);
     try {
       if (mode === 'signup') {
-        await registerUser(phone.trim(), password);
+        await registerUser(phone, password, gender || undefined);
       } else {
-        await loginShopper(phone.trim(), password);
+        await loginShopper(phone, password);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
@@ -52,9 +58,7 @@ export const SignUpView: React.FC = () => {
             <ShoppingBag className="w-5 h-5" />
           </div>
           <h1 className="mt-4 font-display text-xl font-bold text-neutral-950">You&apos;re signed in</h1>
-          <p className="mt-1.5 text-xs text-neutral-500">
-            {user.phone || user.email || user.name}
-          </p>
+          <p className="mt-1.5 text-xs text-neutral-500">{user.phone || user.email || user.name}</p>
           <button
             type="button"
             onClick={() => navigate({ page: 'catalog' })}
@@ -112,26 +116,14 @@ export const SignUpView: React.FC = () => {
         </p>
 
         <form onSubmit={handleSubmit} className="mt-5 space-y-4">
-          <div>
-            <label htmlFor="account-phone" className="block text-xs font-semibold text-neutral-800 mb-1">
-              Phone Number
-            </label>
-            <div className="flex items-center gap-2 rounded-xl border border-neutral-200 px-3.5 py-2.5 focus-within:border-neutral-950">
-              <Phone className="w-4 h-4 text-neutral-400 shrink-0" />
-              <input
-                id="account-phone"
-                type="tel"
-                inputMode="tel"
-                autoComplete="tel"
-                required
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                placeholder="+1 555 010 0000"
-                className="w-full bg-transparent text-sm focus:outline-none"
-              />
-            </div>
-            <p className="mt-1 text-[11px] text-neutral-500">Include your country code, starting with +.</p>
-          </div>
+          <PhoneInput
+            id="account-phone"
+            initialCountry={detected.country}
+            onChange={(value) => setPhone(value)}
+            autoComplete="tel"
+          />
+
+          {mode === 'signup' && <GenderSelect value={gender} onChange={setGender} />}
 
           <div>
             <label htmlFor="account-password" className="block text-xs font-semibold text-neutral-800 mb-1">

@@ -22,6 +22,9 @@ func main() {
 	if err != nil {
 		log.Fatalf("configuration error: %v", err)
 	}
+	if issue := cfg.CloudinaryConfigIssue(); issue != "" {
+		log.Printf("cloudinary: %s", issue)
+	}
 
 	startupCtx, cancelStartup := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancelStartup()
@@ -48,8 +51,9 @@ func main() {
 	ordH := handlers.NewOrderHandler(orderRepo)
 	revH := handlers.NewReviewHandler(reviewRepo)
 	admH := handlers.NewAdminHandler(analyticsRepo, catalogRepo, userRepo, orderRepo)
+	geoH := handlers.NewGeoHandler()
 
-	router := routes.NewRouter(cfg, authH, catH, ordH, revH, admH)
+	router := routes.NewRouter(cfg, authH, catH, ordH, revH, admH, geoH)
 
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,

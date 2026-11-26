@@ -1,5 +1,5 @@
 import type { MetadataRoute } from 'next';
-import { fetchServerCategories, fetchServerProducts, getSiteOrigin } from '@/lib/serverCatalog';
+import { fetchServerCategories, fetchServerProducts, getSiteOrigin } from '@/features/products/services/catalog.service';
 
 export const dynamic = 'force-dynamic';
 

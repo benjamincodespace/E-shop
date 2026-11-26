@@ -4,9 +4,9 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, LayoutGrid, List, RotateCcw } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
 import { filterAndSortProducts } from '@/lib/storeLogic';
-import { formatPrice } from '@/lib/currency';
+import { formatPrice } from '@/utils/currency';
 import type { Category, PriceRangeKey, Product, SortOption } from '@/types/store';
-import { ProductCard } from './ProductCard';
+import { ProductCard } from '@/features/products/components/ProductCard';
 import { ProductCardSkeleton } from '@/components/ProductCardSkeleton';
 
 interface CatalogViewProps {

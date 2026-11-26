@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { StorefrontHome } from '@/components/StorefrontHome';
-import { fetchServerCategories, fetchServerProducts, getSiteOrigin } from '@/lib/serverCatalog';
+import { fetchServerCategories, fetchServerProducts, getSiteOrigin } from '@/features/products/services/catalog.service';
 
 export const revalidate = 30;
 

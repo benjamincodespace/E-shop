@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
-import { ProductDetailView } from '@/components/ProductDetailView';
-import { fetchServerProductBySlug, getSiteOrigin } from '@/lib/serverCatalog';
+import { ProductDetailView } from '@/features/products/components/ProductDetailView';
+import { fetchServerProductBySlug, getSiteOrigin } from '@/features/products/services/catalog.service';
 import { getEffectivePrice } from '@/lib/storeLogic';
 
 export const revalidate = 30;
