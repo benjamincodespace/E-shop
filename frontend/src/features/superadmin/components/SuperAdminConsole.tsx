@@ -915,8 +915,8 @@ export const SuperAdminConsole: React.FC = () => {
                             </p>
                             <p className="text-[11px] font-medium text-neutral-600 truncate">
                               {u.role === 'admin'
-                                ? `${u.productCount} listing${u.productCount === 1 ? '' : 's'}`
-                                : `${u.orderCount} order${u.orderCount === 1 ? '' : 's'} · $${u.totalSpent.toFixed(2)} spent`}
+                                ? `${u.productCount ?? 0} listing${u.productCount === 1 ? '' : 's'}`
+                                : `${u.orderCount ?? 0} order${u.orderCount === 1 ? '' : 's'} · $${(u.totalSpent ?? 0).toFixed(2)} spent`}
                             </p>
                             <span
                               className={`mt-1 inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold ${ROLE_STYLE[u.role]}`}
@@ -1029,8 +1029,8 @@ export const SuperAdminConsole: React.FC = () => {
                             <p>
                               <span className="font-semibold text-neutral-900">Activity:</span>{' '}
                               {u.role === 'admin'
-                                ? `${u.productCount} listing${u.productCount === 1 ? '' : 's'}`
-                                : `${u.orderCount} order${u.orderCount === 1 ? '' : 's'} · $${u.totalSpent.toFixed(2)} spent`}
+                                ? `${u.productCount ?? 0} listing${u.productCount === 1 ? '' : 's'}`
+                                : `${u.orderCount ?? 0} order${u.orderCount === 1 ? '' : 's'} · $${(u.totalSpent ?? 0).toFixed(2)} spent`}
                             </p>
                             <p>
                               <span className="font-semibold text-neutral-900">Account:</span>{' '}
