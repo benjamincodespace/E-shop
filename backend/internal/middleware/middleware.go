@@ -111,10 +111,23 @@ func RequireAdmin(cfg *config.Config, next http.HandlerFunc) http.HandlerFunc {
 			writeJSONError(w, http.StatusForbidden, "Seller permissions required")
 			return
 		}
-		// A seller that has not been verified by a super administrator can sign
-		// in to see its approval state, but every seller action stays blocked.
+		// Unverified sellers may still work inside their console, but with the
+		// free upload allowance enforced by the handlers.
+		next(w, r)
+	})
+}
+
+// RequireVerifiedAdmin is for seller capabilities that stay locked until a
+// super administrator verifies the account (for example the user directory).
+func RequireVerifiedAdmin(cfg *config.Config, next http.HandlerFunc) http.HandlerFunc {
+	return RequireAuth(cfg, func(w http.ResponseWriter, r *http.Request) {
+		claims := GetUserClaims(r.Context())
+		if claims == nil || !claims.Role.IsAdminRole() {
+			writeJSONError(w, http.StatusForbidden, "Seller permissions required")
+			return
+		}
 		if claims.Role == models.RoleAdmin && !claims.Approved {
-			writeJSONError(w, http.StatusForbidden, "Your seller account is awaiting super administrator approval")
+			writeJSONError(w, http.StatusForbidden, "Verify your seller account to unlock this feature")
 			return
 		}
 		next(w, r)

@@ -104,16 +104,18 @@ function resolveAdminTab(raw?: string): AdminTab {
   return ADMIN_TABS.includes(normalized as AdminTab) ? (normalized as AdminTab) : 'dashboard';
 }
 
-// A seller only reaches the console after a super administrator verifies the
-// account; super administrators always have access.
+// Registered sellers may work in the console immediately with the free upload
+// allowance; only a rejected application loses access entirely.
 function canUseConsole(account: User | null): boolean {
   if (!account) return false;
   if (account.role === 'super_admin') return true;
   if (account.role !== 'admin') return false;
-  return account.approvalStatus !== 'pending' && account.approvalStatus !== 'rejected';
+  return account.approvalStatus !== 'rejected';
 }
 
 const VERIFIED_BADGE = '/images/badges/verified-seller.svg';
+// Mirrors the backend free allowance for unverified sellers.
+const FREE_SELLER_LIMIT = 10;
 
 export const AdminDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }) => {
   const {
@@ -275,24 +277,37 @@ export const AdminDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }
   const loadAdminData = useCallback(async () => {
     if (!user || !canUseConsole(user)) return;
     setLoading(true);
+    const isSellerAccount = user.role === 'admin';
+    const isPendingSeller = isSellerAccount && user.approvalStatus === 'pending';
     try {
-      const [anRes, prodRes, invRes, ordRes, custRes, revRes, setRes] = await Promise.all([
+      const [anRes, prodRes, invRes, ordRes, revRes] = await Promise.all([
         api.getAnalytics(),
         api.getProducts({ includeUnpublished: true, limit: 100 }),
         api.getInventory(),
         api.getAdminOrders(),
-        api.getCustomers(),
         api.getAdminReviews(),
-        api.getSettings(),
       ]);
       setAnalytics(anRes);
       setAdminProducts(prodRes.products);
       setInventoryLogs(invRes.logs);
       setOrders(ordRes.orders);
-      setCustomers(custRes.customers);
       setAdminReviews(revRes.reviews);
       setAdminReviewStats(revRes.stats);
-      setSettings(setRes.settings);
+
+      // The user directory stays locked until verification, and store settings
+      // belong to the platform owner.
+      if (!isSellerAccount) {
+        const [custRes, setRes] = await Promise.all([api.getCustomers(), api.getSettings()]);
+        setCustomers(custRes.customers);
+        setSettings(setRes.settings);
+      } else if (!isPendingSeller) {
+        const custRes = await api.getCustomers();
+        setCustomers(custRes.customers);
+        setSettings({});
+      } else {
+        setCustomers([]);
+        setSettings({});
+      }
     } catch (err) {
       notify(err instanceof Error ? err.message : 'Failed loading admin metrics.', 'error');
     } finally {
@@ -344,6 +359,18 @@ export const AdminDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }
   };
 
   const openCreateProduct = () => {
+    if (
+      user?.role === 'admin' &&
+      user.approvalStatus === 'pending' &&
+      adminProducts.length >= FREE_SELLER_LIMIT
+    ) {
+      notify(
+        `Your free seller plan allows ${FREE_SELLER_LIMIT} products. Wait for super administrator verification to upload more.`,
+        'error',
+      );
+      setTab('products');
+      return;
+    }
     setEditingProduct(null);
     setFormName('');
     setFormSlug('');
@@ -586,10 +613,9 @@ export const AdminDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }
     );
   }
 
-  // Pending and rejected sellers see their application state instead of the
-  // console; the API blocks their actions as well.
+  // A rejected seller loses console access; pending sellers keep the limited
+  // free plan and see their allowance inside the console.
   if (user && user.role === 'admin' && !canUseConsole(user)) {
-    const rejected = user.approvalStatus === 'rejected';
     return (
       <div className="min-h-screen bg-neutral-50 flex flex-col items-center justify-center px-4 py-12">
         <div className="w-full max-w-md bg-white border border-neutral-200 rounded-3xl p-7 text-center shadow-[0_12px_40px_rgba(0,0,0,0.06)]">
@@ -608,16 +634,12 @@ export const AdminDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }
           <div className="w-14 h-14 rounded-2xl bg-neutral-950 text-white flex items-center justify-center mx-auto">
             <Shirt className="w-6 h-6" />
           </div>
-          <h1 className="mt-4 font-display text-xl font-bold text-neutral-950">
-            {rejected ? 'Seller application not approved' : 'Awaiting super admin approval'}
-          </h1>
+          <h1 className="mt-4 font-display text-xl font-bold text-neutral-950">Seller application not approved</h1>
           <p className="mt-2 text-xs text-neutral-600 leading-relaxed">
-            {rejected
-              ? 'Your seller application was not approved. Contact the platform owner if you believe this is a mistake.'
-              : `Thanks, ${user.name}. A super administrator is reviewing your store. As soon as it is approved you automatically receive the verified seller badge and full access to upload products and see your sales statistics.`}
+            Your seller application was not approved. Contact the platform owner if you believe this is a mistake.
           </p>
           <p className="mt-4 text-[11px] text-neutral-500">
-            Application status: <strong className="uppercase">{rejected ? 'Rejected' : 'Pending review'}</strong>
+            Application status: <strong className="uppercase">Rejected</strong>
           </p>
           <button
             type="button"
@@ -849,6 +871,11 @@ export const AdminDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }
   // Sellers get the store tabs only; platform settings and category creation
   // stay with the super administrator.
   const sellerView = user.role === 'admin';
+  const sellerPending = sellerView && user.approvalStatus === 'pending';
+  const sellerProductCount = adminProducts.length;
+  const sellerImageCount = new Set(adminProducts.flatMap((p) => p.images.filter(Boolean))).size;
+  const productLimitReached = sellerPending && sellerProductCount >= FREE_SELLER_LIMIT;
+  const imageLimitReached = sellerPending && sellerImageCount >= FREE_SELLER_LIMIT;
 
   // Filtered lists
   const filteredProducts = adminProducts.filter((p) => {
@@ -916,7 +943,7 @@ export const AdminDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'products', label: 'Products', icon: Shirt },
     { id: 'orders', label: 'Orders', icon: ShoppingCart },
-    { id: 'customers', label: sellerView ? 'Users' : 'Customers', icon: Users },
+    ...(sellerPending ? [] : [{ id: 'customers' as AdminTab, label: sellerView ? 'Users' : 'Customers', icon: Users }]),
     { id: 'reviews', label: 'Reviews', icon: MessageSquare },
     { id: 'analytics', label: 'Analytics', icon: BarChart3 },
     ...(sellerView ? [] : [{ id: 'settings' as AdminTab, label: 'Settings', icon: Settings }]),
@@ -1040,6 +1067,50 @@ export const AdminDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }
         </header>
 
         <main className="max-w-6xl mx-auto px-4 sm:px-8 py-6 space-y-6">
+          {sellerPending && (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 sm:p-5">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="max-w-xl">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-amber-900">
+                    Limited seller access
+                  </p>
+                  <p className="mt-1 text-[11px] text-amber-900/80 leading-relaxed">
+                    Your free plan includes {FREE_SELLER_LIMIT} products and {FREE_SELLER_LIMIT} product images. When
+                    either limit is reached, uploads pause until a super administrator verifies your store. Verification
+                    unlocks unlimited uploads and the verified badge; a payment upgrade is also available.
+                  </p>
+                </div>
+                <div className="text-right shrink-0">
+                  <p className="text-[11px] font-semibold text-amber-900 tabular-nums">
+                    {sellerProductCount}/{FREE_SELLER_LIMIT} products
+                  </p>
+                  <p className="text-[11px] font-semibold text-amber-900 tabular-nums">
+                    {sellerImageCount}/{FREE_SELLER_LIMIT} images
+                  </p>
+                </div>
+              </div>
+              <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div className="h-1.5 rounded-full bg-amber-200 overflow-hidden">
+                  <div
+                    className="h-full bg-amber-700"
+                    style={{ width: `${Math.min(100, (sellerProductCount / FREE_SELLER_LIMIT) * 100)}%` }}
+                  />
+                </div>
+                <div className="h-1.5 rounded-full bg-amber-200 overflow-hidden">
+                  <div
+                    className="h-full bg-amber-700"
+                    style={{ width: `${Math.min(100, (sellerImageCount / FREE_SELLER_LIMIT) * 100)}%` }}
+                  />
+                </div>
+              </div>
+              {(productLimitReached || imageLimitReached) && (
+                <p className="mt-3 text-[11px] font-semibold text-amber-900">
+                  Limit reached — new uploads are paused. Wait for verification or upgrade to a paid plan to continue.
+                </p>
+              )}
+            </div>
+          )}
+
           {/* DASHBOARD TAB */}
           {tab === 'dashboard' && (
             <>
@@ -1826,7 +1897,9 @@ export const AdminDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }
             { id: 'orders', label: 'Orders', icon: ShoppingCart },
             { id: 'customers', label: 'Customers', icon: UserCheck },
           ] as const
-        ).map((item) => {
+        )
+          .filter((item) => !sellerPending || item.id !== 'customers')
+          .map((item) => {
           const Icon = item.icon;
           const active = tab === item.id;
           return (

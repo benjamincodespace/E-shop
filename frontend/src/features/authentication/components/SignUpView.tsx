@@ -139,8 +139,8 @@ export const SignUpView: React.FC = () => {
             <p className="mt-3 text-xs text-neutral-600 leading-relaxed bg-neutral-50 border border-neutral-200 rounded-xl px-3 py-2.5 flex items-start gap-2 text-left">
               <Clock className="w-4 h-4 shrink-0 mt-0.5" />
               <span>
-                A super administrator is reviewing your seller account. You will get the verified badge and full seller
-                access as soon as it is approved.
+                Your seller panel is open on the free plan with up to 10 products and 10 images. A super administrator is
+                reviewing your store — verification unlocks unlimited uploads and the verified badge.
               </span>
             </p>
           )}

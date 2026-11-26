@@ -93,7 +93,7 @@ func NewRouter(
 	mux.HandleFunc("GET /api/admin/analytics", middleware.RequireAdmin(cfg, admH.GetAnalytics))
 	mux.HandleFunc("GET /api/admin/inventory", middleware.RequireAdmin(cfg, admH.GetInventory))
 	mux.HandleFunc("PUT /api/admin/inventory/{productId}", middleware.RequireAdmin(cfg, admH.AdjustInventory))
-	mux.HandleFunc("GET /api/admin/customers", middleware.RequireAdmin(cfg, admH.ListCustomers))
+	mux.HandleFunc("GET /api/admin/customers", middleware.RequireVerifiedAdmin(cfg, admH.ListCustomers))
 	mux.HandleFunc("GET /api/admin/customers/{id}/orders", middleware.RequireSuperAdmin(cfg, admH.CustomerOrders))
 	mux.HandleFunc("PUT /api/admin/customers/{id}/toggle-disabled", middleware.RequireSuperAdmin(cfg, admH.ToggleCustomerDisabled))
 	mux.HandleFunc("GET /api/admin/settings", middleware.RequireSuperAdmin(cfg, admH.GetSettings))

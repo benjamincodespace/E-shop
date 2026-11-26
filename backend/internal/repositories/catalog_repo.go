@@ -232,6 +232,38 @@ func sortProducts(items []models.Product, sortBy string) {
 	}
 }
 
+// CountSellerProducts powers the free allowance for unverified sellers.
+func (r *CatalogRepository) CountSellerProducts(ctx context.Context, sellerID string) (int64, error) {
+	return r.store.DB.Collection("products").CountDocuments(ctx, bson.M{"sellerId": sellerID})
+}
+
+// SellerImageCount counts the distinct product images a seller owns, ignoring
+// one product when it is being edited so its own photos are not double-counted.
+func (r *CatalogRepository) SellerImageCount(ctx context.Context, sellerID, excludeProductID string) (int, error) {
+	cur, err := r.store.DB.Collection("products").Find(ctx, bson.M{"sellerId": sellerID})
+	if err != nil {
+		return 0, err
+	}
+	defer cur.Close(ctx)
+
+	unique := make(map[string]bool)
+	for cur.Next(ctx) {
+		var p models.Product
+		if err := cur.Decode(&p); err != nil {
+			continue
+		}
+		if excludeProductID != "" && p.ID.Hex() == excludeProductID {
+			continue
+		}
+		for _, img := range p.Images {
+			if img != "" {
+				unique[img] = true
+			}
+		}
+	}
+	return len(unique), nil
+}
+
 func (r *CatalogRepository) FindProductBySlug(ctx context.Context, slug string) (*models.Product, error) {
 	var p models.Product
 	err := r.store.DB.Collection("products").FindOne(ctx, bson.M{"slug": slug}).Decode(&p)

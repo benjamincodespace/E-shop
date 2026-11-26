@@ -156,6 +156,54 @@ type productPayload struct {
 	SEODescription string                  `json:"seoDescription"`
 }
 
+// sellerQuotaExceeded enforces the free allowance for unverified sellers. It
+// writes the upgrade response itself and reports whether the request must stop.
+func (h *CatalogHandler) sellerQuotaExceeded(
+	w http.ResponseWriter,
+	r *http.Request,
+	claims *security.AuthClaims,
+	extraImages []string,
+	excludeProductID string,
+) bool {
+	if claims == nil || claims.Role != models.RoleAdmin {
+		return false
+	}
+	existing, err := h.catalogRepo.SellerImageCount(r.Context(), claims.Sub, excludeProductID)
+	if err != nil {
+		WriteError(w, http.StatusInternalServerError, "Failed to check your seller allowance.")
+		return true
+	}
+	fresh := make(map[string]bool)
+	for _, img := range extraImages {
+		if img != "" {
+			fresh[img] = true
+		}
+	}
+	if existing+len(fresh) > models.FreeSellerImageLimit {
+		WriteError(w, http.StatusForbidden, "Your free seller plan allows 10 product images. Wait for super administrator verification to unlock unlimited uploads.")
+		return true
+	}
+	return false
+}
+
+// sellerImageLimitReached blocks new uploads once an unverified seller has used
+// its ten free product images.
+func (h *CatalogHandler) sellerImageLimitReached(w http.ResponseWriter, r *http.Request, claims *security.AuthClaims) bool {
+	if claims == nil || claims.Role != models.RoleAdmin {
+		return false
+	}
+	count, err := h.catalogRepo.SellerImageCount(r.Context(), claims.Sub, "")
+	if err != nil {
+		WriteError(w, http.StatusInternalServerError, "Failed to check your seller allowance.")
+		return true
+	}
+	if count >= models.FreeSellerImageLimit {
+		WriteError(w, http.StatusForbidden, "Your free seller plan allows 10 product images. Wait for super administrator verification to unlock unlimited uploads.")
+		return true
+	}
+	return false
+}
+
 func (h *CatalogHandler) CreateProduct(w http.ResponseWriter, r *http.Request) {
 	claims := middleware.GetUserClaims(r.Context())
 	var body productPayload
@@ -206,6 +254,20 @@ func (h *CatalogHandler) CreateProduct(w http.ResponseWriter, r *http.Request) {
 	}
 	if len(imgs) > 8 {
 		imgs = imgs[:8]
+	}
+	if claims != nil && claims.Role == models.RoleAdmin {
+		count, err := h.catalogRepo.CountSellerProducts(r.Context(), claims.Sub)
+		if err != nil {
+			WriteError(w, http.StatusInternalServerError, "Failed to check your seller allowance.")
+			return
+		}
+		if count >= models.FreeSellerProductLimit {
+			WriteError(w, http.StatusForbidden, "Your free seller plan allows 10 products. Wait for super administrator verification to unlock unlimited uploads.")
+			return
+		}
+	}
+	if h.sellerQuotaExceeded(w, r, claims, imgs, "") {
+		return
 	}
 	sizes := body.Sizes
 	if len(sizes) == 0 {
@@ -393,6 +455,10 @@ func (h *CatalogHandler) UpdateProduct(w http.ResponseWriter, r *http.Request) {
 		seoDesc = existing.SEODescription
 	}
 
+	if h.sellerQuotaExceeded(w, r, claims, imgs, existing.IDHex) {
+		return
+	}
+
 	fields := bson.M{
 		"name":           name,
 		"slug":           slug,
@@ -449,6 +515,9 @@ func (h *CatalogHandler) DeleteProduct(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *CatalogHandler) CloudinarySignature(w http.ResponseWriter, r *http.Request) {
+	if h.sellerImageLimitReached(w, r, middleware.GetUserClaims(r.Context())) {
+		return
+	}
 	sig := h.cloudinary.GenerateUploadSignature(time.Now().Unix())
 	WriteJSON(w, http.StatusOK, sig)
 }
@@ -458,6 +527,9 @@ func (h *CatalogHandler) CloudinarySignature(w http.ResponseWriter, r *http.Requ
 // product. Saving the image only after Cloudinary confirms keeps catalogue
 // records from pointing at images that were never persisted.
 func (h *CatalogHandler) UploadImage(w http.ResponseWriter, r *http.Request) {
+	if h.sellerImageLimitReached(w, r, middleware.GetUserClaims(r.Context())) {
+		return
+	}
 	if !h.cloudinary.Configured() {
 		WriteError(w, http.StatusServiceUnavailable, "Cloudinary is not configured on the API server. Set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET.")
 		return

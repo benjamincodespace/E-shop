@@ -34,6 +34,13 @@ const DefaultCurrency = "USD"
 // further account can be created or promoted to super administrator.
 const MaxSuperAdmins = 4
 
+// Free seller allowance. A registered but unverified seller can upload this
+// many products and product images; verification removes both limits.
+const (
+	FreeSellerProductLimit = 10
+	FreeSellerImageLimit   = 10
+)
+
 // Seller approval states. A newly registered seller stays pending until a
 // super administrator verifies the account.
 const (
