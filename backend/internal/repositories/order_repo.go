@@ -550,6 +550,53 @@ func (r *OrderRepository) ListAdminOrders(ctx context.Context, status, search st
 	return out, nil
 }
 
+// ListAdminOrdersForSeller returns the orders that contain products owned by
+// one seller, with the item list trimmed to those products. This keeps a
+// seller's console from exposing other sellers' sales.
+func (r *OrderRepository) ListAdminOrdersForSeller(ctx context.Context, sellerID, status, search string) ([]models.Order, error) {
+	pCur, err := r.store.DB.Collection("products").Find(ctx, bson.M{"sellerId": sellerID})
+	if err != nil {
+		return nil, err
+	}
+	var owned []models.Product
+	if err := pCur.All(ctx, &owned); err != nil {
+		pCur.Close(ctx)
+		return nil, err
+	}
+	pCur.Close(ctx)
+
+	ownedIDs := make(map[string]bool, len(owned))
+	for i := range owned {
+		ownedIDs[owned[i].ID.Hex()] = true
+	}
+
+	orders, err := r.ListAdminOrders(ctx, status, search)
+	if err != nil {
+		return nil, err
+	}
+
+	out := make([]models.Order, 0, len(orders))
+	for _, o := range orders {
+		items := make([]models.OrderItem, 0, len(o.Items))
+		subtotal := 0.0
+		for _, it := range o.Items {
+			if !ownedIDs[it.ProductID] {
+				continue
+			}
+			items = append(items, it)
+			subtotal += it.UnitPrice * float64(it.Quantity)
+		}
+		if len(items) == 0 {
+			continue
+		}
+		o.Items = items
+		o.Subtotal = services.Round2(subtotal)
+		o.Total = services.Round2(subtotal + o.ShippingFee)
+		out = append(out, o)
+	}
+	return out, nil
+}
+
 // UpdateOrderStatusAtomic validates order state transition and atomically restores product stock on cancellation.
 func (r *OrderRepository) UpdateOrderStatusAtomic(ctx context.Context, orderIDHex string, nextStatus models.OrderStatus, actorName string) (*models.Order, error) {
 	oid, err := bson.ObjectIDFromHex(orderIDHex)

@@ -10,6 +10,8 @@ interface AdminReviewsPanelProps {
   products: Product[];
   onRemove: (reviewId: string) => void;
   onResolveReports: (reviewId: string) => void;
+  /** Sellers may read their product feedback but not moderate it. */
+  readOnly?: boolean;
 }
 
 /** Review moderation desk: filter, inspect stats and remove/clear reports. */
@@ -19,6 +21,7 @@ export const AdminReviewsPanel: React.FC<AdminReviewsPanelProps> = ({
   products,
   onRemove,
   onResolveReports,
+  readOnly = false,
 }) => {
   const [productFilter, setProductFilter] = useState('');
   const [ratingFilter, setRatingFilter] = useState(0);
@@ -44,7 +47,9 @@ export const AdminReviewsPanel: React.FC<AdminReviewsPanelProps> = ({
         <div>
           <h2 className="font-display text-base font-bold text-neutral-950">Product Reviews &amp; Ratings</h2>
           <p className="mt-0.5 text-xs text-neutral-500">
-            Moderate customer feedback, remove inappropriate content and clear reported reviews.
+            {readOnly
+              ? 'Customer feedback on your products. Only the platform owner can moderate reviews.'
+              : 'Moderate customer feedback, remove inappropriate content and clear reported reviews.'}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -162,6 +167,8 @@ export const AdminReviewsPanel: React.FC<AdminReviewsPanelProps> = ({
                   </p>
                 </div>
                 <div className="flex flex-col items-end gap-1.5 shrink-0">
+                  {!readOnly && (
+                  <>
                   <button
                     type="button"
                     onClick={() => onRemove(rev.id)}
@@ -178,6 +185,8 @@ export const AdminReviewsPanel: React.FC<AdminReviewsPanelProps> = ({
                     >
                       Dismiss reports
                     </button>
+                  )}
+                  </>
                   )}
                 </div>
               </div>

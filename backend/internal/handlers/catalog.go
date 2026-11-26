@@ -61,10 +61,18 @@ func (h *CatalogHandler) CreateCategory(w http.ResponseWriter, r *http.Request) 
 func (h *CatalogHandler) ListProducts(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	claims := middleware.GetUserClaims(r.Context())
-	includeUnpublished := q.Get("includeUnpublished") == "true" && claims != nil && claims.Role == models.RoleAdmin
+	includeUnpublished := q.Get("includeUnpublished") == "true" && claims != nil && claims.Role.IsAdminRole()
 
 	page, _ := strconv.Atoi(q.Get("page"))
 	limit, _ := strconv.Atoi(q.Get("limit"))
+
+	// Sellers only ever see and manage their own catalogue; the platform owner
+	// and the public storefront are unscoped.
+	sellerID := ""
+	if claims != nil && claims.Role == models.RoleAdmin {
+		sellerID = claims.Sub
+		includeUnpublished = true
+	}
 
 	products, pagination, err := h.catalogRepo.ListProducts(r.Context(), repositories.ProductQuery{
 		Search:             q.Get("search"),
@@ -74,6 +82,7 @@ func (h *CatalogHandler) ListProducts(w http.ResponseWriter, r *http.Request) {
 		Featured:           q.Get("featured") == "true",
 		Popular:            q.Get("popular") == "true",
 		IncludeUnpublished: includeUnpublished,
+		SellerID:           sellerID,
 		Page:               page,
 		Limit:              limit,
 	})
@@ -95,7 +104,11 @@ func (h *CatalogHandler) GetProductBySlug(w http.ResponseWriter, r *http.Request
 		return
 	}
 	claims := middleware.GetUserClaims(r.Context())
-	if prod == nil || (!prod.Published && (claims == nil || claims.Role != models.RoleAdmin)) {
+	canSeeUnpublished := claims != nil && claims.Role == models.RoleSuperAdmin
+	if prod != nil && claims != nil && claims.Role == models.RoleAdmin && prod.SellerID == claims.Sub {
+		canSeeUnpublished = true
+	}
+	if prod == nil || (!prod.Published && !canSeeUnpublished) {
 		WriteError(w, http.StatusNotFound, "Product not found.")
 		return
 	}
@@ -234,6 +247,8 @@ func (h *CatalogHandler) CreateProduct(w http.ResponseWriter, r *http.Request) {
 
 	prod := &models.Product{
 		Name:           name,
+		SellerID:       claims.Sub,
+		SellerName:     claims.Name,
 		Slug:           slug,
 		Description:    desc,
 		Price:          services.RoundCurrency(body.Price, currency),
@@ -266,6 +281,10 @@ func (h *CatalogHandler) UpdateProduct(w http.ResponseWriter, r *http.Request) {
 	existing, err := h.catalogRepo.FindProductByID(r.Context(), idHex)
 	if err != nil || existing == nil {
 		WriteError(w, http.StatusNotFound, "Product not found.")
+		return
+	}
+	if claims.Role == models.RoleAdmin && existing.SellerID != claims.Sub {
+		WriteError(w, http.StatusForbidden, "You can only edit your own products.")
 		return
 	}
 

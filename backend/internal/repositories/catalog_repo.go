@@ -103,8 +103,10 @@ type ProductQuery struct {
 	Featured           bool
 	Popular            bool
 	IncludeUnpublished bool
-	Page               int
-	Limit              int
+	// SellerID scopes the result to one seller's own catalogue.
+	SellerID string
+	Page     int
+	Limit    int
 }
 
 func (r *CatalogRepository) ListProducts(ctx context.Context, q ProductQuery) ([]models.Product, models.Pagination, error) {
@@ -120,6 +122,9 @@ func (r *CatalogRepository) ListProducts(ctx context.Context, q ProductQuery) ([
 	}
 	if q.Popular {
 		filter["popular"] = true
+	}
+	if q.SellerID != "" {
+		filter["sellerId"] = q.SellerID
 	}
 
 	cursor, err := r.store.DB.Collection("products").Find(ctx, filter)

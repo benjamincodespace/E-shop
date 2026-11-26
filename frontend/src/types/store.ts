@@ -1,6 +1,6 @@
 export type CurrencyCode = 'USD' | 'EUR' | 'ZAR' | 'KES' | 'TZS' | 'UGX' | 'RWF' | 'XOF';
 
-export type UserRole = 'customer' | 'admin';
+export type UserRole = 'customer' | 'admin' | 'super_admin';
 
 export type Gender = 'male' | 'female' | 'prefer_not_to_say';
 
@@ -34,6 +34,8 @@ export interface DeliveryAddress {
 export interface User {
   id: string;
   name: string;
+  /** Uploaded profile photo; empty for accounts that never set one. */
+  avatarUrl?: string;
   email: string;
   phone: string;
   address: string;
@@ -42,6 +44,11 @@ export interface User {
   /** Optional; older accounts have no gender value. */
   gender?: Gender | '';
   role: UserRole;
+  /** Seller approval state; empty for legacy accounts and buyers. */
+  approvalStatus?: '' | 'pending' | 'approved' | 'rejected';
+  /** True once a super administrator verifies the seller. */
+  verified?: boolean;
+  verifiedAt?: string;
   disabled: boolean;
   createdAt: string;
   updatedAt: string;
@@ -67,6 +74,9 @@ export interface Product {
   categoryId: string;
   categoryName: string;
   categorySlug: string;
+  /** Seller account that uploaded the product; empty for legacy products. */
+  sellerId?: string;
+  sellerName?: string;
   images: string[];
   sizes: TeeSize[];
   colors: TeeColorOption[];

@@ -113,19 +113,66 @@ async function apiRequest<T>(path: string, options: RequestInit = {}, allowRetry
 export const api = {
   // Auth
   getAdminStatus: () => apiRequest<{ claimed: boolean; passcodeConfigured: boolean }>('/api/auth/admin/status'),
-  claimAdmin: (payload: { name: string; email: string; password: string; passcode?: string }) =>
+  claimAdmin: (payload: {
+    name: string;
+    email: string;
+    password: string;
+    passcode?: string;
+    avatarUrl?: string;
+  }) =>
     apiRequest<{ user: User; token: string; purchasedProductIds: string[] }>('/api/auth/admin/claim', {
       method: 'POST',
       body: JSON.stringify(payload),
     }),
+  // First-run setup for the platform owner at /admin/super.
+  superAdminStatus: () =>
+    apiRequest<{ claimed: boolean; passcodeConfigured: boolean }>('/api/auth/superadmin/status'),
+  claimSuperAdmin: (payload: {
+    name: string;
+    email: string;
+    password: string;
+    passcode?: string;
+    avatarUrl?: string;
+  }) =>
+    apiRequest<{ user: User; token: string; purchasedProductIds: string[] }>('/api/auth/superadmin/claim', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  // Uploads a profile photo for the signed-in account and returns the user.
+  uploadAvatar: (file: File) => {
+    const form = new FormData();
+    form.append('file', file);
+    return apiRequest<{ user: User; url: string }>('/api/auth/avatar', { method: 'POST', body: form });
+  },
+  // Seller sign-up: creates a pending seller account that a super admin must
+  // verify before the seller console unlocks.
+  registerSeller: (payload: {
+    name: string;
+    email: string;
+    password: string;
+    phone?: string;
+    avatarUrl?: string;
+  }) =>
+    apiRequest<{ user: User; token: string; purchasedProductIds: string[] }>('/api/auth/seller/register', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
   // Shopper sign-up: a phone number and password are all that is required.
-  register: (payload: { phone: string; password: string; name?: string; email?: string; address?: string; gender?: string }) =>
+  register: (payload: {
+    phone: string;
+    password: string;
+    name?: string;
+    email?: string;
+    address?: string;
+    gender?: string;
+    avatarUrl?: string;
+  }) =>
     apiRequest<{ user: User; token: string; purchasedProductIds: string[] }>('/api/auth/register', {
       method: 'POST',
       body: JSON.stringify(payload),
     }),
   // Admin console sign-in only; shoppers check out as guests.
-  login: (payload: { email: string; password: string; portal: 'admin' | 'customer' }) =>
+  login: (payload: { email: string; password: string; portal: 'admin' | 'customer' | 'super' }) =>
     apiRequest<{ user: User; token: string; purchasedProductIds: string[] }>('/api/auth/login', {
       method: 'POST',
       body: JSON.stringify(payload),
@@ -363,4 +410,55 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify(settings),
     }),
+
+  // Super Administrator
+  getSuperOverview: () =>
+    apiRequest<{
+      totalCustomers: number;
+      totalAdmins: number;
+      totalSuperAdmins: number;
+      totalUsers: number;
+      pendingSellers: number;
+      superAdminLimit: number;
+      analytics: AnalyticsData;
+    }>('/api/superadmin/overview'),
+  getSuperUsers: (search?: string) =>
+    apiRequest<{ users: User[] }>(
+      `/api/superadmin/users${search ? `?search=${encodeURIComponent(search)}` : ''}`,
+    ),
+  updateUserRole: (userId: string, role: User['role']) =>
+    apiRequest<{ user: User }>(`/api/superadmin/users/${encodeURIComponent(userId)}/role`, {
+      method: 'PUT',
+      body: JSON.stringify({ role }),
+    }),
+  approveSeller: (userId: string) =>
+    apiRequest<{ user: User }>(`/api/superadmin/users/${encodeURIComponent(userId)}/approve`, {
+      method: 'PUT',
+    }),
+  rejectSeller: (userId: string) =>
+    apiRequest<{ user: User }>(`/api/superadmin/users/${encodeURIComponent(userId)}/reject`, {
+      method: 'PUT',
+    }),
+  toggleUserDisabled: (userId: string) =>
+    apiRequest<{ user: User }>(`/api/superadmin/users/${encodeURIComponent(userId)}/toggle-disabled`, {
+      method: 'PUT',
+    }),
+  deleteUser: (userId: string) =>
+    apiRequest<{ ok: boolean }>(`/api/superadmin/users/${encodeURIComponent(userId)}`, {
+      method: 'DELETE',
+    }),
+  getSuperProducts: (search?: string) =>
+    apiRequest<{ products: Product[] }>(
+      `/api/superadmin/products${search ? `?search=${encodeURIComponent(search)}` : ''}`,
+    ),
+  setProductPublished: (productId: string, published: boolean) =>
+    apiRequest<{ product: Product }>(`/api/superadmin/products/${encodeURIComponent(productId)}/published`, {
+      method: 'PUT',
+      body: JSON.stringify({ published }),
+    }),
+  deleteSuperProduct: (productId: string) =>
+    apiRequest<{ ok: boolean; archived?: boolean; message?: string }>(
+      `/api/superadmin/products/${encodeURIComponent(productId)}`,
+      { method: 'DELETE' },
+    ),
 };

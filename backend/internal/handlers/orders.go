@@ -370,7 +370,16 @@ func (h *OrderHandler) MyOrders(w http.ResponseWriter, r *http.Request) {
 func (h *OrderHandler) AdminListOrders(w http.ResponseWriter, r *http.Request) {
 	status := r.URL.Query().Get("status")
 	search := r.URL.Query().Get("search")
-	orders, err := h.orderRepo.ListAdminOrders(r.Context(), status, search)
+	claims := middleware.GetUserClaims(r.Context())
+
+	var orders []models.Order
+	var err error
+	if claims != nil && claims.Role == models.RoleAdmin {
+		// Sellers only see orders that include their own products.
+		orders, err = h.orderRepo.ListAdminOrdersForSeller(r.Context(), claims.Sub, status, search)
+	} else {
+		orders, err = h.orderRepo.ListAdminOrders(r.Context(), status, search)
+	}
 	if err != nil {
 		WriteError(w, http.StatusInternalServerError, "Failed to load orders.")
 		return

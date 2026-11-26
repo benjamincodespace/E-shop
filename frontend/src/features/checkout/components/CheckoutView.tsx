@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowRight,
+  Check,
   CheckCircle2,
   Crosshair,
   Lock,
@@ -18,6 +19,7 @@ import { SafeImage } from '@/components/SafeImage';
 import { COUNTRIES, detectCountryCode, flagEmoji } from '@/lib/countries';
 import type { DeliveryAddress, Order } from '@/types/store';
 import { composeDeliveryAddress } from '../lib/address';
+import { reverseGeocode, type ReverseGeocodedAddress } from '../lib/reverseGeocode';
 import { createCheckoutKey } from '../lib/checkoutKey';
 import { useCurrentLocation } from '../hooks/useCurrentLocation';
 import { DeliveryPinMap } from './DeliveryPinMap';
@@ -36,71 +38,63 @@ const FieldError: React.FC<{ id: string; message?: string }> = ({ id, message })
     </p>
   ) : null;
 
-/* Mobile-money brand marks shown beside the payment methods. */
-const AirtelMoneyIcon: React.FC<{ className?: string }> = ({ className }) => (
-  <svg viewBox="0 0 32 32" className={className} aria-hidden="true" focusable="false">
-    <rect width="32" height="32" rx="8" fill="#E40000" />
-    <path
-      d="M8.5 21.5c3.6-1.6 6.4-5 7.5-9.5"
-      fill="none"
-      stroke="#fff"
-      strokeWidth="2.4"
-      strokeLinecap="round"
+/* Payment brand marks: real logo tiles, shown large enough to recognise at a glance. */
+const PaymentMark: React.FC<{ src: string; alt: string }> = ({ src, alt }) => (
+  <span className="grid h-11 w-[68px] shrink-0 place-items-center overflow-hidden rounded-lg sm:h-12 sm:w-[78px]">
+    <img
+      src={src}
+      alt={alt}
+      width={480}
+      height={320}
+      loading="lazy"
+      decoding="async"
+      className="h-full w-full rounded-lg object-contain"
     />
-    <path
-      d="M16 12c1.1 4.5 3.9 7.9 7.5 9.5"
-      fill="none"
-      stroke="#fff"
-      strokeWidth="2.4"
-      strokeLinecap="round"
-    />
-    <circle cx="16" cy="23" r="1.5" fill="#fff" />
-  </svg>
+  </span>
 );
 
-const MtnMoneyIcon: React.FC<{ className?: string }> = ({ className }) => (
-  <svg viewBox="0 0 44 44" className={className} aria-hidden="true" focusable="false">
-    <rect width="44" height="44" rx="9" fill="#FFCB05" />
-    <text
-      x="22"
-      y="27.5"
-      textAnchor="middle"
-      fontFamily="Arial, Helvetica, sans-serif"
-      fontSize="12"
-      fontWeight="800"
-      fill="#111111"
-    >
-      MTN
-    </text>
-  </svg>
-);
-
-const VisaIcon: React.FC<{ className?: string }> = ({ className }) => (
-  <svg viewBox="0 0 512 320" className={className} aria-hidden="true" focusable="false">
-    <path d="M288 0c-43 0-78 35-78 78s35 78 78 78 78-35 78-78-35-78-78-78zM288 32c48 0 88 39 88 88s-40 88-88 88-88-39-88-88 40-88 88-88zM288 160c-41.4 0-75.2 33.8-75.2 75.2s33.8 75.2 75.2 75.2 75.2-33.8 75.2-75.2-33.8-75.2-75.2-75.2zm0 88a13.08 13.08 0 0 1-13.08 13.08 13.08 13.08 0 0 1-13.08-13.08 13.08 13.08 0 0 1 13.08-13.08 13.08 13.08 0 0 1 13.08 13.08z" fill="#1A1F71" />
-    <path fill="#F7B600" fillRule="evenodd" d="M512 96v128c0 42-34 76-76 76H256c-33 0-64-27-64-60V96c0-42 34-76 76-76H436c33 0 64 27 64 60v96c0 6-5 11-11 11H267c-6 0-11-5-11-11v-96H152c-16 0-31 11-34 26l34 34c3-1 6-2 9-2h190c16 0 31 11 34 26l-34 34c-6 1-11 5-11 11v12h192c16 0 31 11 34 26l-34 34c-6 1-11 5-11 11h-176c0-19 15-34 34-34h190c3 2 5 3 8 3h190c6 0 11-5 11-11v-96h-33c-6 0-11-5-11-11v-16c0-6 5-11 11-11h47c6 0 11 5 11 11v16H460c6 0 11 5 11 11v96c0 2-2 4-5 4H267c-3 0-5-2-5-5v-96h33c6 0 11 5 11 11v16H460c6 0 11 5 11 11v96c0 6-5 11-11 11H288V96c0-42 34-76 76-76h190c6 0 11 5 11 11v96c0 10-8 18-18 18H256c-10 0-18-8-18-18V96c0-10 8-18 18-18h256zM429 224H256V160h173c6 0 11 5 11 11v6h-9c-6 0-11-5-11-11z" clipRule="evenodd" />
-  </svg>
+/* Same footprint as a brand mark, for the two cash options that have no logo. */
+const MethodGlyph: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <span className="grid h-11 w-[68px] shrink-0 place-items-center rounded-lg bg-neutral-100 text-neutral-800 sm:h-12 sm:w-[78px]">
+    {children}
+  </span>
 );
 
 const PaymentMethodCard: React.FC<{
   name: string;
-  icon: React.ReactElement;
+  hint: string;
+  mark: React.ReactNode;
   selected: boolean;
   onClick: () => void;
-}> = ({ name, icon, selected, onClick }) => (
+}> = ({ name, hint, mark, selected, onClick }) => (
   <button
     type="button"
     onClick={onClick}
     aria-pressed={selected}
-    className={`flex items-center gap-3 rounded-xl border text-left transition-colors cursor-pointer ${
+    className={`group relative flex min-w-0 items-center gap-3 rounded-2xl border p-3 text-left transition-all duration-200 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-950 focus-visible:ring-offset-2 ${
       selected
-          ? "border-neutral-950 bg-neutral-950 text-white shadow-[0_6px_14px_rgba(0,0,0,0.16)]"
-          : "border-neutral-200 bg-white text-neutral-800 hover:border-neutral-400"
+        ? 'border-neutral-950 bg-neutral-950 text-white shadow-[0_14px_28px_-18px_rgba(0,0,0,0.7)]'
+        : 'border-neutral-200 bg-white text-neutral-900 hover:-translate-y-0.5 hover:border-neutral-400 hover:shadow-[0_14px_26px_-22px_rgba(0,0,0,0.5)]'
     }`}
   >
-    <span className={`shrink-0 ${selected ? "text-white" : "text-neutral-700"}`}>{icon}</span>
-    <span className={`flex-1 min-w-0 font-semibold text-xs ${selected ? "text-white" : "text-neutral-900"}`}>
-      {name}
+    {mark}
+    <span className="min-w-0 flex-1">
+      <span className="block truncate text-[13px] font-semibold leading-tight">{name}</span>
+      <span
+        className={`mt-0.5 block truncate text-[11px] leading-tight ${
+          selected ? 'text-white/55' : 'text-neutral-500'
+        }`}
+      >
+        {hint}
+      </span>
+    </span>
+    <span
+      aria-hidden="true"
+      className={`grid h-5 w-5 shrink-0 place-items-center rounded-full border transition-colors ${
+        selected ? 'border-white bg-white text-neutral-950' : 'border-neutral-300 text-transparent'
+      }`}
+    >
+      <Check className="h-3 w-3" strokeWidth={3.5} />
     </span>
   </button>
 );
@@ -144,6 +138,16 @@ export const CheckoutView: React.FC = () => {
   const [confirmedOrder, setConfirmedOrder] = useState<Order | null>(null);
   const [geoHint, setGeoHint] = useState('');
   const [profileLoaded, setProfileLoaded] = useState(false);
+  const [geocoding, setGeocoding] = useState(false);
+  const [addressNote, setAddressNote] = useState('');
+  // Values this panel wrote itself, so a new pin refreshes its own fills but
+  // never overwrites an address the customer typed.
+  const autoFilledRef = useRef<{ city: string; district: string; street: string; building: string }>({
+    city: '',
+    district: '',
+    street: '',
+    building: '',
+  });
 
   // Priority 1: the customer's own saved profile details.
   useEffect(() => {
@@ -418,6 +422,57 @@ export const CheckoutView: React.FC = () => {
     }
   };
 
+  /** Fills the four address fields from a pin, keeping anything typed by hand. */
+  const applyDetectedAddress = (detected: ReverseGeocodedAddress) => {
+    const filled = autoFilledRef.current;
+    const canReplace = (current: string, previous: string) => current.trim() === '' || current === previous;
+    if (detected.city && canReplace(city, filled.city)) {
+      setCity(detected.city);
+      filled.city = detected.city;
+    }
+    if (detected.district && canReplace(district, filled.district)) {
+      setDistrict(detected.district);
+      filled.district = detected.district;
+    }
+    if (detected.street && canReplace(street, filled.street)) {
+      setStreet(detected.street);
+      filled.street = detected.street;
+    }
+    if (detected.building && canReplace(building, filled.building)) {
+      setBuilding(detected.building);
+      filled.building = detected.building;
+    }
+    if (detected.country) {
+      setCountry((current) => current || detected.country || '');
+    }
+  };
+
+  const handleUseCurrentLocation = async () => {
+    setAddressNote('');
+    const captured = await location.request();
+    if (!captured) return;
+    setGeocoding(true);
+    try {
+      const detected = await reverseGeocode(captured.lat, captured.lng);
+      if (!detected) {
+        setAddressNote('Pin saved, but no address was found for it. Please type the street below.');
+        return;
+      }
+      applyDetectedAddress(detected);
+      const accuracy = Math.round(captured.accuracy);
+      const accuracyText = captured.accuracy > 0 ? ` (±${accuracy} m)` : '';
+      setAddressNote(
+        detected.street
+          ? `Address filled from your pin${accuracyText} — check it and edit anything that looks off. Map data © OpenStreetMap contributors.`
+          : `City and district filled from your pin${accuracyText} — please add the street and building. Map data © OpenStreetMap contributors.`,
+      );
+    } catch {
+      setAddressNote('Pin saved, but the address lookup failed. Please type the street below.');
+    } finally {
+      setGeocoding(false);
+    }
+  };
+
   const locationMessage: Record<string, string> = {
     idle: 'Drop a pin with your browser location, or type the address manually — whichever is easiest.',
     locating: 'Requesting your location…',
@@ -629,14 +684,29 @@ export const CheckoutView: React.FC = () => {
               </div>
               <button
                 type="button"
-                onClick={location.request}
-                disabled={location.status === 'locating'}
+                onClick={handleUseCurrentLocation}
+                disabled={location.status === 'locating' || geocoding}
                 className="inline-flex items-center gap-1.5 rounded-full bg-neutral-950 px-4 py-2 text-[11px] font-semibold text-white hover:bg-neutral-800 cursor-pointer disabled:opacity-60"
               >
-                <Crosshair className="w-3.5 h-3.5" />
-                {location.status === 'locating' ? 'Locating…' : 'Use Current Location'}
+                <Crosshair className={`w-3.5 h-3.5 ${location.status === 'locating' || geocoding ? 'animate-spin' : ''}`} />
+                {geocoding
+                  ? 'Filling address…'
+                  : location.status === 'locating'
+                    ? 'Locating…'
+                    : 'Use Current Location'}
               </button>
             </div>
+
+            {(geocoding || addressNote) && (
+              <p
+                aria-live="polite"
+                className="rounded-lg bg-white/70 px-2.5 py-2 text-[11px] font-medium text-neutral-700"
+              >
+                {geocoding
+                  ? 'Finding the street, city and district for your pin…'
+                  : addressNote}
+              </p>
+            )}
 
             {pin && <DeliveryPinMap lat={pin.lat} lng={pin.lng} accuracy={pin.accuracy} onRemove={location.clear} />}
 
@@ -677,35 +747,53 @@ export const CheckoutView: React.FC = () => {
           )}
 
           <div className="pt-2">
-            <span className="block text-xs font-semibold text-neutral-800 mb-2">Payment Method</span>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            <div className="mb-2 flex items-baseline justify-between gap-2">
+              <span className="block text-xs font-semibold text-neutral-800">Payment Method</span>
+              <span className="text-[11px] text-neutral-500">Mobile money &amp; cards</span>
+            </div>
+            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
               <PaymentMethodCard
                 name="Cash on Delivery"
-                icon={<ShieldCheck className="w-5 h-5" />}
+                hint="Pay the courier on arrival"
+                mark={
+                  <MethodGlyph>
+                    <ShieldCheck className="h-5 w-5" />
+                  </MethodGlyph>
+                }
                 selected={paymentMethod === 'Cash on Delivery'}
                 onClick={() => setPaymentMethod('Cash on Delivery')}
               />
               <PaymentMethodCard
                 name="Pay on Pickup"
-                icon={<CheckCircle2 className="w-5 h-5" />}
+                hint="Pay when you collect"
+                mark={
+                  <MethodGlyph>
+                    <CheckCircle2 className="h-5 w-5" />
+                  </MethodGlyph>
+                }
                 selected={paymentMethod === 'Pay on Pickup'}
                 onClick={() => setPaymentMethod('Pay on Pickup')}
               />
               <PaymentMethodCard
                 name="Airtel Money"
-                icon={<AirtelMoneyIcon className="h-6 w-6" />}
+                hint="Mobile money transfer"
+                mark={<PaymentMark src="/images/payments/airtel-money.svg" alt="Airtel Money" />}
                 selected={paymentMethod === 'Airtel Money'}
                 onClick={() => setPaymentMethod('Airtel Money')}
               />
               <PaymentMethodCard
                 name="MTN Money"
-                icon={<MtnMoneyIcon className="h-6 w-6" />}
+                hint="Mobile money transfer"
+                mark={
+                  <PaymentMark src="/images/payments/mtn-mobile-money.svg" alt="MTN Mobile Money" />
+                }
                 selected={paymentMethod === 'MTN Money'}
                 onClick={() => setPaymentMethod('MTN Money')}
               />
               <PaymentMethodCard
                 name="VISA"
-                icon={<VisaIcon className="h-6 w-6" />}
+                hint="Debit or credit card"
+                mark={<PaymentMark src="/images/payments/visa.svg" alt="Visa" />}
                 selected={paymentMethod === 'VISA'}
                 onClick={() => setPaymentMethod('VISA')}
               />

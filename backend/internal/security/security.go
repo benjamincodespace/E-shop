@@ -25,7 +25,10 @@ type AuthClaims struct {
 	Email string          `json:"email"`
 	Name  string          `json:"name"`
 	Role  models.UserRole `json:"role"`
-	Type  string          `json:"type"`
+	// Approved is set for super administrators and verified sellers so seller
+	// consoles can be gated without a database lookup on every request.
+	Approved bool   `json:"approved,omitempty"`
+	Type     string `json:"type"`
 	jwt.RegisteredClaims
 }
 
@@ -55,11 +58,12 @@ func ConstantTimeEqual(a, b string) bool {
 func SignToken(user *models.User, secret string, tokenType string, ttl time.Duration) (string, error) {
 	now := time.Now()
 	claims := AuthClaims{
-		Sub:   user.IDHex,
-		Email: user.Email,
-		Name:  user.Name,
-		Role:  user.Role,
-		Type:  tokenType,
+		Sub:      user.IDHex,
+		Email:    user.Email,
+		Name:     user.Name,
+		Role:     user.Role,
+		Approved: user.IsApprovedSeller(),
+		Type:     tokenType,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   user.IDHex,
 			IssuedAt:  jwt.NewNumericDate(now),

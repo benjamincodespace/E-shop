@@ -104,9 +104,31 @@ function resolveAdminTab(raw?: string): AdminTab {
   return ADMIN_TABS.includes(normalized as AdminTab) ? (normalized as AdminTab) : 'dashboard';
 }
 
+// A seller only reaches the console after a super administrator verifies the
+// account; super administrators always have access.
+function canUseConsole(account: User | null): boolean {
+  if (!account) return false;
+  if (account.role === 'super_admin') return true;
+  if (account.role !== 'admin') return false;
+  return account.approvalStatus !== 'pending' && account.approvalStatus !== 'rejected';
+}
+
+const VERIFIED_BADGE = '/images/badges/verified-seller.svg';
+
 export const AdminDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }) => {
-  const { user, authReady, categories, currency, loginUser, claimAdminAccount, logoutUser, navigate, notify, refreshCatalog } =
-    useStore();
+  const {
+    user,
+    authReady,
+    categories,
+    currency,
+    loginUser,
+    claimAdminAccount,
+    uploadAvatar,
+    logoutUser,
+    navigate,
+    notify,
+    refreshCatalog,
+  } = useStore();
 
   const [tab, setTab] = useState<AdminTab>(() => resolveAdminTab(initialTab));
 
@@ -125,6 +147,21 @@ export const AdminDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }
   const [authPassword, setAuthPassword] = useState('');
   const [authPasscode, setAuthPasscode] = useState('');
   const [authSubmitting, setAuthSubmitting] = useState(false);
+  // Profile photo chosen during first-run admin registration; uploaded after
+  // the account exists so the photo is tied to the signed-in admin.
+  const [claimAvatar, setClaimAvatar] = useState<File | null>(null);
+  const [claimAvatarPreview, setClaimAvatarPreview] = useState('');
+  const claimAvatarInputRef = React.useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (!claimAvatar) {
+      setClaimAvatarPreview('');
+      return;
+    }
+    const url = URL.createObjectURL(claimAvatar);
+    setClaimAvatarPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [claimAvatar]);
 
   // Admin Data
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
@@ -227,7 +264,7 @@ export const AdminDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }
   }, [formDesc, formName, productModalOpen, seoDescManual]);
 
   useEffect(() => {
-    if (!user || user.role !== 'admin') {
+    if (!user || !canUseConsole(user)) {
       api
         .getAdminStatus()
         .then(setAdminStatus)
@@ -236,7 +273,7 @@ export const AdminDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }
   }, [user]);
 
   const loadAdminData = useCallback(async () => {
-    if (!user || user.role !== 'admin') return;
+    if (!user || !canUseConsole(user)) return;
     setLoading(true);
     try {
       const [anRes, prodRes, invRes, ordRes, custRes, revRes, setRes] = await Promise.all([
@@ -277,6 +314,14 @@ export const AdminDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }
         password: authPassword,
         passcode: authPasscode || undefined,
       });
+      if (claimAvatar) {
+        try {
+          await uploadAvatar(claimAvatar);
+        } catch (err) {
+          notify(err instanceof Error ? err.message : 'Profile photo could not be saved.', 'error');
+        }
+        setClaimAvatar(null);
+      }
       notify('Admin account initialized. Welcome to E-shop All Admin!', 'success');
     } catch (err) {
       notify(err instanceof Error ? err.message : 'Admin setup failed.', 'error');
@@ -541,7 +586,59 @@ export const AdminDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }
     );
   }
 
-  if (!user || user.role !== 'admin') {
+  // Pending and rejected sellers see their application state instead of the
+  // console; the API blocks their actions as well.
+  if (user && user.role === 'admin' && !canUseConsole(user)) {
+    const rejected = user.approvalStatus === 'rejected';
+    return (
+      <div className="min-h-screen bg-neutral-50 flex flex-col items-center justify-center px-4 py-12">
+        <div className="w-full max-w-md bg-white border border-neutral-200 rounded-3xl p-7 text-center shadow-[0_12px_40px_rgba(0,0,0,0.06)]">
+          <div className="flex items-center justify-between mb-6">
+            <BrandLogo subtitle="Seller Panel" />
+            <button
+              type="button"
+              onClick={() => navigate({ page: 'home' })}
+              className="text-xs font-semibold text-neutral-600 hover:text-neutral-950 inline-flex items-center gap-1 cursor-pointer"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>Storefront</span>
+            </button>
+          </div>
+
+          <div className="w-14 h-14 rounded-2xl bg-neutral-950 text-white flex items-center justify-center mx-auto">
+            <Shirt className="w-6 h-6" />
+          </div>
+          <h1 className="mt-4 font-display text-xl font-bold text-neutral-950">
+            {rejected ? 'Seller application not approved' : 'Awaiting super admin approval'}
+          </h1>
+          <p className="mt-2 text-xs text-neutral-600 leading-relaxed">
+            {rejected
+              ? 'Your seller application was not approved. Contact the platform owner if you believe this is a mistake.'
+              : `Thanks, ${user.name}. A super administrator is reviewing your store. As soon as it is approved you automatically receive the verified seller badge and full access to upload products and see your sales statistics.`}
+          </p>
+          <p className="mt-4 text-[11px] text-neutral-500">
+            Application status: <strong className="uppercase">{rejected ? 'Rejected' : 'Pending review'}</strong>
+          </p>
+          <button
+            type="button"
+            onClick={() => navigate({ page: 'home' })}
+            className="mt-6 w-full py-3 rounded-full bg-neutral-950 text-white text-xs font-semibold cursor-pointer"
+          >
+            Back to Storefront
+          </button>
+          <button
+            type="button"
+            onClick={logoutUser}
+            className="mt-2 w-full py-2.5 rounded-full text-xs font-semibold text-neutral-600 hover:text-neutral-950 cursor-pointer"
+          >
+            Sign Out
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user || !(user.role === 'admin' || user.role === 'super_admin')) {
     const showFirstRunClaim = adminStatus && !adminStatus.claimed;
 
     return (
@@ -559,7 +656,7 @@ export const AdminDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }
             </button>
           </div>
 
-          {user && user.role !== 'admin' ? (
+          {user && !(user.role === 'admin' || user.role === 'super_admin') ? (
             <div className="space-y-4">
               <h1 className="font-display text-xl font-bold text-neutral-950">Admin Access Required</h1>
               <p className="text-xs text-neutral-600 leading-relaxed">
@@ -596,6 +693,43 @@ export const AdminDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }
                   placeholder="Store Owner"
                   className="w-full rounded-xl border border-neutral-200 px-3.5 py-2.5 text-sm focus:outline-none focus:border-neutral-950"
                 />
+              </div>
+              <div className="flex items-center gap-3 rounded-2xl border border-neutral-200 p-3">
+                <div className="w-14 h-14 rounded-full bg-neutral-100 overflow-hidden shrink-0 flex items-center justify-center">
+                  {claimAvatarPreview ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={claimAvatarPreview} alt="Selected profile photo" className="w-full h-full object-cover" />
+                  ) : (
+                    <Users className="w-5 h-5 text-neutral-400" />
+                  )
+                  }
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-neutral-800">Profile photo</p>
+                  <p className="text-[11px] text-neutral-500">Optional, shows beside your name.</p>
+                  <button
+                    type="button"
+                    onClick={() => claimAvatarInputRef.current?.click()}
+                    className="mt-1.5 px-3 py-1.5 rounded-full border border-neutral-200 text-[11px] font-semibold text-neutral-700 hover:border-neutral-950 cursor-pointer"
+                  >
+                    {claimAvatar ? 'Change photo' : 'Add photo'}
+                  </button>
+                  <input
+                    ref={claimAvatarInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0] || null;
+                      e.target.value = '';
+                      if (file && file.size > 5 * 1024 * 1024) {
+                        notify('Profile photo must be 5MB or smaller.', 'error');
+                        return;
+                      }
+                      setClaimAvatar(file);
+                    }}
+                  />
+                </div>
               </div>
               <div>
                 <label htmlFor="adm-claim-email" className="block text-xs font-semibold text-neutral-800 mb-1">
@@ -698,12 +832,23 @@ export const AdminDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }
               >
                 {authSubmitting ? 'Signing In...' : 'Enter Admin Panel'}
               </button>
+              <button
+                type="button"
+                onClick={() => navigate({ page: 'admin', tab: 'super' })}
+                className="w-full text-[11px] font-medium text-neutral-500 hover:text-neutral-950 cursor-pointer"
+              >
+                Platform owner? Open the super admin console →
+              </button>
             </form>
           )}
         </div>
       </div>
     );
   }
+
+  // Sellers get the store tabs only; platform settings and category creation
+  // stay with the super administrator.
+  const sellerView = user.role === 'admin';
 
   // Filtered lists
   const filteredProducts = adminProducts.filter((p) => {
@@ -738,6 +883,29 @@ export const AdminDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }
     return true;
   });
 
+  // Sellers only see reviews for their own catalogue, with the summary cards
+  // recomputed from that subset instead of the platform-wide figures.
+  const sellerProductIds = new Set(adminProducts.map((p) => p.id));
+  const visibleReviews = sellerView
+    ? adminReviews.filter((rev) => sellerProductIds.has(rev.productId))
+    : adminReviews;
+  const visibleReviewStats = sellerView
+    ? (() => {
+        const total = visibleReviews.length;
+        const sum = visibleReviews.reduce((acc, rev) => acc + rev.rating, 0);
+        return {
+          total,
+          average: total > 0 ? Math.round((sum / total) * 10) / 10 : 0,
+          reported: visibleReviews.filter((rev) => rev.reported).length,
+          verified: visibleReviews.filter((rev) => rev.verifiedPurchase).length,
+          breakdown: [5, 4, 3, 2, 1].map((stars) => {
+            const count = visibleReviews.filter((rev) => rev.rating === stars).length;
+            return { stars, count, percentage: total > 0 ? Math.round((count / total) * 100) : 0 };
+          }),
+        };
+      })()
+    : adminReviewStats;
+
   const filteredCustomers = customers.filter((c) => {
     if (!customerSearch.trim()) return true;
     const q = customerSearch.toLowerCase();
@@ -748,10 +916,10 @@ export const AdminDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'products', label: 'Products', icon: Shirt },
     { id: 'orders', label: 'Orders', icon: ShoppingCart },
-    { id: 'customers', label: 'Customers', icon: Users },
+    { id: 'customers', label: sellerView ? 'Users' : 'Customers', icon: Users },
     { id: 'reviews', label: 'Reviews', icon: MessageSquare },
     { id: 'analytics', label: 'Analytics', icon: BarChart3 },
-    { id: 'settings', label: 'Settings', icon: Settings },
+    ...(sellerView ? [] : [{ id: 'settings' as AdminTab, label: 'Settings', icon: Settings }]),
   ];
 
   const inStockCount = adminProducts.filter((p) => p.stock > 0).length;
@@ -763,7 +931,33 @@ export const AdminDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }
       <aside className="hidden lg:flex w-64 bg-neutral-950 text-white flex-col justify-between p-5 shrink-0 sticky top-0 h-screen">
         <div>
           <div className="pb-6 border-b border-neutral-800">
-            <BrandLogo inverted subtitle="Admin Panel" />
+            <BrandLogo inverted subtitle={sellerView ? 'Seller Panel' : 'Admin Panel'} />
+          </div>
+
+          <div className="mt-5 flex items-center gap-3 rounded-2xl bg-neutral-900/80 p-3">
+            <div className="w-10 h-10 rounded-full bg-white/10 overflow-hidden shrink-0 flex items-center justify-center text-xs font-bold">
+              {user.avatarUrl ? (
+                <SafeImage src={user.avatarUrl} alt={user.name} className="w-full h-full object-cover" />
+              ) : (
+                (user.name || 'A').charAt(0).toUpperCase()
+              )}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-semibold truncate inline-flex items-center gap-1">
+                <span className="truncate">{user.name}</span>
+                {user.verified && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={VERIFIED_BADGE} alt="Verified seller" className="w-3.5 h-3.5 shrink-0" />
+                )}
+                {!user.verified && user.role === 'admin' && !user.approvalStatus && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={VERIFIED_BADGE} alt="Verified seller" className="w-3.5 h-3.5 shrink-0" />
+                )}
+              </p>
+              <p className="text-[10px] text-neutral-400 truncate">
+                {user.role === 'super_admin' ? 'Super Admin' : 'Seller'}
+              </p>
+            </div>
           </div>
 
           <nav aria-label="Admin navigation" className="mt-6 space-y-1">
@@ -820,7 +1014,7 @@ export const AdminDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }
         >
           <div className="flex items-center gap-3">
             <div className="lg:hidden">
-              <BrandLogo subtitle="Admin Panel" />
+              <BrandLogo subtitle={sellerView ? 'Seller Panel' : 'Admin Panel'} />
             </div>
             <h1 className="hidden lg:block font-display text-xl font-bold text-neutral-950 capitalize">{tab}</h1>
           </div>
@@ -855,7 +1049,9 @@ export const AdminDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }
                     Welcome Back, {user.name.split(' ')[0]}!
                   </h2>
                   <p className="mt-1.5 text-xs sm:text-sm text-neutral-300">
-                    Manage your T-shirt inventory, orders, and verified reviews from one clean console.
+                    {sellerView
+                      ? 'Upload products and follow your own sales, stock and customer reviews from one clean console.'
+                      : 'Manage every seller, product, order and verified review from one clean console.'}
                   </p>
                 </div>
                 <div className="hidden sm:block w-56 h-28 rounded-2xl overflow-hidden shrink-0">
@@ -1189,14 +1385,16 @@ export const AdminDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }
                               </button>
                             )}
 
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteProduct(p)}
-                              aria-label={`Delete ${p.name}`}
-                              className="p-1.5 rounded-full text-neutral-400 hover:text-neutral-950 hover:bg-neutral-100 cursor-pointer ml-auto"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+                            {!sellerView && (
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteProduct(p)}
+                                aria-label={`Delete ${p.name}`}
+                                className="p-1.5 rounded-full text-neutral-400 hover:text-neutral-950 hover:bg-neutral-100 cursor-pointer ml-auto"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -1318,20 +1516,26 @@ export const AdminDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }
                           <span className="font-mono-num text-sm font-bold text-neutral-950">
                             {formatCurrency(ord.total, ord.currency)}
                           </span>
-                          <select
-                            aria-label={`Update status for order ${ord.orderNumber}`}
-                            value={ord.status}
-                            disabled={ORDER_TRANSITIONS[ord.status].length === 0}
-                            onChange={(e) => handleOrderStatusChange(ord.id, e.target.value as OrderStatus)}
-                            className="rounded-full border border-neutral-200 bg-neutral-50 px-3 py-1.5 text-xs font-semibold text-neutral-900 focus:outline-none focus:border-neutral-950 disabled:opacity-60"
-                          >
-                            <option value={ord.status}>{ord.status} (current)</option>
-                            {ORDER_TRANSITIONS[ord.status].map((st) => (
-                              <option key={st} value={st}>
-                                Move to {st}
-                              </option>
-                            ))}
-                          </select>
+                          {sellerView ? (
+                            <span className="rounded-full border border-neutral-200 bg-neutral-50 px-3 py-1.5 text-xs font-semibold text-neutral-900">
+                              {ord.status}
+                            </span>
+                          ) : (
+                            <select
+                              aria-label={`Update status for order ${ord.orderNumber}`}
+                              value={ord.status}
+                              disabled={ORDER_TRANSITIONS[ord.status].length === 0}
+                              onChange={(e) => handleOrderStatusChange(ord.id, e.target.value as OrderStatus)}
+                              className="rounded-full border border-neutral-200 bg-neutral-50 px-3 py-1.5 text-xs font-semibold text-neutral-900 focus:outline-none focus:border-neutral-950 disabled:opacity-60"
+                            >
+                              <option value={ord.status}>{ord.status} (current)</option>
+                              {ORDER_TRANSITIONS[ord.status].map((st) => (
+                                <option key={st} value={st}>
+                                  Move to {st}
+                                </option>
+                              ))}
+                            </select>
+                          )}
                         </div>
                       </div>
 
@@ -1356,9 +1560,16 @@ export const AdminDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }
           {tab === 'customers' && (
             <div className="space-y-4">
               <div className="flex items-center justify-between gap-3">
-                <h2 className="font-display text-base font-bold text-neutral-950">
-                  Registered Customers ({filteredCustomers.length})
-                </h2>
+                <div>
+                  <h2 className="font-display text-base font-bold text-neutral-950">
+                    {sellerView ? 'Registered Users' : 'Registered Customers'} ({filteredCustomers.length})
+                  </h2>
+                  {sellerView && (
+                    <p className="text-[11px] text-neutral-500">
+                      Read-only directory. Only the platform owner can change accounts.
+                    </p>
+                  )}
+                </div>
                 <div className="flex items-center gap-2 bg-white border border-neutral-200 rounded-full px-3.5 py-2 w-64">
                   <Search className="w-3.5 h-3.5 text-neutral-400" />
                   <input
@@ -1391,26 +1602,30 @@ export const AdminDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => handleInspectCustomer(c)}
-                          className="px-3 py-1.5 rounded-full border border-neutral-200 hover:border-neutral-950 text-xs font-semibold cursor-pointer"
-                        >
-                          Order History
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleToggleCustomer(c.id)}
-                          className={`px-3 py-1.5 rounded-full text-xs font-semibold cursor-pointer ${
-                            c.disabled
-                              ? 'bg-neutral-950 text-white'
-                              : 'border border-neutral-200 text-neutral-700 hover:border-neutral-950'
-                          }`}
-                        >
-                          {c.disabled ? 'Re-enable' : 'Disable'}
-                        </button>
-                      </div>
+                      {sellerView ? (
+                        <span className="text-[11px] font-medium text-neutral-400">Read only</span>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleInspectCustomer(c)}
+                            className="px-3 py-1.5 rounded-full border border-neutral-200 hover:border-neutral-950 text-xs font-semibold cursor-pointer"
+                          >
+                            Order History
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleToggleCustomer(c.id)}
+                            className={`px-3 py-1.5 rounded-full text-xs font-semibold cursor-pointer ${
+                              c.disabled
+                                ? 'bg-neutral-950 text-white'
+                                : 'border border-neutral-200 text-neutral-700 hover:border-neutral-950'
+                            }`}
+                          >
+                            {c.disabled ? 'Re-enable' : 'Disable'}
+                          </button>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -1421,11 +1636,12 @@ export const AdminDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }
           {/* REVIEWS TAB */}
           {tab === 'reviews' && (
             <AdminReviewsPanel
-              reviews={adminReviews}
-              stats={adminReviewStats}
+              reviews={visibleReviews}
+              stats={visibleReviewStats}
               products={adminProducts}
               onRemove={handleDeleteAdminReview}
               onResolveReports={handleResolveReviewReports}
+              readOnly={sellerView}
             />
           )}
 
@@ -1474,7 +1690,7 @@ export const AdminDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }
           )}
 
           {/* SETTINGS TAB */}
-          {tab === 'settings' && (
+          {tab === 'settings' && !sellerView && (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <form
                 onSubmit={handleSaveSettings}

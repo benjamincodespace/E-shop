@@ -35,7 +35,16 @@ func (h *AdminHandler) Health(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (h *AdminHandler) GetAnalytics(w http.ResponseWriter, r *http.Request) {
-	data, err := h.analyticsRepo.GetAnalytics(r.Context())
+	claims := middleware.GetUserClaims(r.Context())
+	var data *models.AnalyticsData
+	var err error
+	if claims != nil && claims.Role == models.RoleAdmin {
+		// Sellers see statistics for their own catalogue only; the platform
+		// owner keeps the full picture.
+		data, err = h.analyticsRepo.GetSellerAnalytics(r.Context(), claims.Sub)
+	} else {
+		data, err = h.analyticsRepo.GetAnalytics(r.Context())
+	}
 	if err != nil {
 		WriteError(w, http.StatusInternalServerError, "Failed to aggregate analytics.")
 		return
@@ -44,10 +53,29 @@ func (h *AdminHandler) GetAnalytics(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *AdminHandler) GetInventory(w http.ResponseWriter, r *http.Request) {
+	claims := middleware.GetUserClaims(r.Context())
 	products, logs, err := h.catalogRepo.ListInventory(r.Context())
 	if err != nil {
 		WriteError(w, http.StatusInternalServerError, "Failed to load inventory.")
 		return
+	}
+	if claims != nil && claims.Role == models.RoleAdmin {
+		// A seller only sees stock for its own products and their audit trail.
+		own := make([]models.Product, 0, len(products))
+		ownedIDs := make(map[string]bool)
+		for _, p := range products {
+			if p.SellerID == claims.Sub {
+				own = append(own, p)
+				ownedIDs[p.IDHex] = true
+			}
+		}
+		filteredLogs := make([]models.InventoryLog, 0, len(logs))
+		for _, l := range logs {
+			if ownedIDs[l.ProductIDHex] {
+				filteredLogs = append(filteredLogs, l)
+			}
+		}
+		products, logs = own, filteredLogs
 	}
 	WriteJSON(w, http.StatusOK, map[string]interface{}{
 		"products": products,
@@ -66,6 +94,17 @@ func (h *AdminHandler) AdjustInventory(w http.ResponseWriter, r *http.Request) {
 	if err := DecodeJSON(r, &body); err != nil {
 		WriteError(w, http.StatusBadRequest, "Invalid inventory adjustment.")
 		return
+	}
+	if claims.Role == models.RoleAdmin {
+		product, err := h.catalogRepo.FindProductByID(r.Context(), productID)
+		if err != nil || product == nil {
+			WriteError(w, http.StatusNotFound, "Product not found.")
+			return
+		}
+		if product.SellerID != claims.Sub {
+			WriteError(w, http.StatusForbidden, "You can only adjust stock for your own products.")
+			return
+		}
 	}
 	mode := "set"
 	if body.Mode == "delta" {

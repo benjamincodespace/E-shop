@@ -116,7 +116,15 @@ interface StoreContextValue {
   clearCartLocal: () => void;
   toggleWishlist: (product: Product) => Promise<void>;
   loginUser: (email: string, password: string) => Promise<User>;
-  registerUser: (phone: string, password: string, gender?: string) => Promise<User>;
+  registerUser: (phone: string, password: string, gender?: string, name?: string) => Promise<User>;
+  /** Creates a pending seller account that a super admin must verify. */
+  registerSeller: (payload: {
+    name: string;
+    email: string;
+    password: string;
+    phone?: string;
+    avatarUrl?: string;
+  }) => Promise<User>;
   /** Saves or clears the customer's address; only used on explicit opt-in. */
   updateDeliveryAddress: (address: DeliveryAddress | null) => Promise<void>;
   loginShopper: (phone: string, password: string) => Promise<User>;
@@ -125,7 +133,17 @@ interface StoreContextValue {
     email: string;
     password: string;
     passcode?: string;
+    avatarUrl?: string;
   }) => Promise<User>;
+  loginSuperAdmin: (email: string, password: string) => Promise<User>;
+  claimSuperAdminAccount: (payload: {
+    name: string;
+    email: string;
+    password: string;
+    passcode?: string;
+    avatarUrl?: string;
+  }) => Promise<User>;
+  uploadAvatar: (file: File) => Promise<User>;
   logoutUser: () => Promise<void>;
 }
 
@@ -469,12 +487,22 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   }, []);
 
   // Shopper sign-up: phone number + password only, then signed in immediately.
-  const registerUser = useCallback(async (phone: string, password: string, gender?: string) => {
-    const res = await api.register({ phone, password, gender });
+  const registerUser = useCallback(async (phone: string, password: string, gender?: string, name?: string) => {
+    const res = await api.register({ phone, password, gender, name });
     setAuthToken(res.token);
     setUser(res.user);
     return res.user;
   }, []);
+
+  const registerSeller = useCallback(
+    async (payload: { name: string; email: string; password: string; phone?: string; avatarUrl?: string }) => {
+      const res = await api.registerSeller(payload);
+      setAuthToken(res.token);
+      setUser(res.user);
+      return res.user;
+    },
+    [],
+  );
 
   const loginShopper = useCallback(async (phone: string, password: string) => {
     const res = await api.login({ email: phone, password, portal: 'customer' });
@@ -484,7 +512,13 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   }, []);
 
   const claimAdminAccount = useCallback(
-    async (payload: { name: string; email: string; password: string; passcode?: string }) => {
+    async (payload: {
+      name: string;
+      email: string;
+      password: string;
+      passcode?: string;
+      avatarUrl?: string;
+    }) => {
       const res = await api.claimAdmin(payload);
       setAuthToken(res.token);
       setUser(res.user);
@@ -492,6 +526,35 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     },
     [],
   );
+
+  const loginSuperAdmin = useCallback(async (email: string, password: string) => {
+    const res = await api.login({ email, password, portal: 'super' });
+    setAuthToken(res.token);
+    setUser(res.user);
+    return res.user;
+  }, []);
+
+  const claimSuperAdminAccount = useCallback(
+    async (payload: {
+      name: string;
+      email: string;
+      password: string;
+      passcode?: string;
+      avatarUrl?: string;
+    }) => {
+      const res = await api.claimSuperAdmin(payload);
+      setAuthToken(res.token);
+      setUser(res.user);
+      return res.user;
+    },
+    [],
+  );
+
+  const uploadAvatar = useCallback(async (file: File) => {
+    const res = await api.uploadAvatar(file);
+    setUser(res.user);
+    return res.user;
+  }, []);
 
   const updateDeliveryAddress = useCallback(async (address: DeliveryAddress | null) => {
     const res = address ? await api.saveDeliveryAddress(address) : await api.clearDeliveryAddress();
@@ -546,9 +609,13 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         toggleWishlist,
         loginUser,
         registerUser,
+        registerSeller,
         updateDeliveryAddress,
         loginShopper,
         claimAdminAccount,
+        loginSuperAdmin,
+        claimSuperAdminAccount,
+        uploadAvatar,
         logoutUser,
       }}
     >

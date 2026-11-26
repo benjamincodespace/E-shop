@@ -12,10 +12,35 @@ type UserRole string
 const (
 	RoleCustomer UserRole = "customer"
 	RoleAdmin    UserRole = "admin"
+	// RoleSuperAdmin owns the whole platform: every user, every product and
+	// every seller/admin account. The regular admin keeps the seller console.
+	RoleSuperAdmin UserRole = "super_admin"
 )
+
+// IsAdminRole reports whether the role may operate a store admin console.
+func (r UserRole) IsAdminRole() bool {
+	return r == RoleAdmin || r == RoleSuperAdmin
+}
+
+// IsValidRole reports whether a value can be persisted as a user role.
+func IsValidRole(r UserRole) bool {
+	return r == RoleCustomer || r == RoleAdmin || r == RoleSuperAdmin
+}
 
 // DefaultCurrency is the canonical pricing currency for legacy records.
 const DefaultCurrency = "USD"
+
+// MaxSuperAdmins is the hard cap on platform-owner accounts. Once four exist no
+// further account can be created or promoted to super administrator.
+const MaxSuperAdmins = 4
+
+// Seller approval states. A newly registered seller stays pending until a
+// super administrator verifies the account.
+const (
+	ApprovalPending  = "pending"
+	ApprovalApproved = "approved"
+	ApprovalRejected = "rejected"
+)
 
 type OrderStatus string
 
@@ -73,6 +98,7 @@ type User struct {
 	ID           bson.ObjectID `bson:"_id,omitempty" json:"-"`
 	IDHex        string        `bson:"-" json:"id"`
 	Name         string        `bson:"name" json:"name"`
+	AvatarURL    string        `bson:"avatarUrl,omitempty" json:"avatarUrl,omitempty"`
 	Email        string        `bson:"email,omitempty" json:"email"`
 	PasswordHash string        `bson:"passwordHash" json:"-"`
 	Phone        string        `bson:"phone" json:"phone"`
@@ -80,13 +106,31 @@ type User struct {
 	// DeliveryAddress is only set when the customer chooses to save it.
 	DeliveryAddress *DeliveryAddress `bson:"deliveryAddress,omitempty" json:"deliveryAddress,omitempty"`
 	// Gender is optional and omitted for accounts created before it existed.
-	Gender         string     `bson:"gender,omitempty" json:"gender,omitempty"`
-	Role           UserRole   `bson:"role" json:"role"`
+	Gender string   `bson:"gender,omitempty" json:"gender,omitempty"`
+	Role   UserRole `bson:"role" json:"role"`
+	// ApprovalStatus gates seller (admin) accounts: pending, approved or
+	// rejected. Empty means a legacy account and is treated as approved.
+	ApprovalStatus string     `bson:"approvalStatus,omitempty" json:"approvalStatus,omitempty"`
+	Verified       bool       `bson:"verified,omitempty" json:"verified"`
+	VerifiedAt     *time.Time `bson:"verifiedAt,omitempty" json:"verifiedAt,omitempty"`
 	Disabled       bool       `bson:"disabled" json:"disabled"`
 	ResetCode      string     `bson:"resetCode,omitempty" json:"-"`
 	ResetExpiresAt *time.Time `bson:"resetExpiresAt,omitempty" json:"-"`
 	CreatedAt      time.Time  `bson:"createdAt" json:"createdAt"`
 	UpdatedAt      time.Time  `bson:"updatedAt" json:"updatedAt"`
+}
+
+// IsApprovedSeller reports whether an account may operate a seller console.
+// Super administrators always pass, and admins (sellers) created before the
+// approval flow have an empty status and stay grandfathered in.
+func (u *User) IsApprovedSeller() bool {
+	if u.Role == RoleSuperAdmin {
+		return true
+	}
+	if u.Role != RoleAdmin {
+		return false
+	}
+	return u.ApprovalStatus != ApprovalPending && u.ApprovalStatus != ApprovalRejected
 }
 
 type CustomerSummary struct {
@@ -106,18 +150,22 @@ type Category struct {
 }
 
 type Product struct {
-	ID             bson.ObjectID    `bson:"_id,omitempty" json:"-"`
-	IDHex          string           `bson:"-" json:"id"`
-	Name           string           `bson:"name" json:"name"`
-	Slug           string           `bson:"slug" json:"slug"`
-	Description    string           `bson:"description" json:"description"`
-	Price          float64          `bson:"price" json:"price"`
-	Currency       string           `bson:"currency,omitempty" json:"currency"`
-	DiscountPrice  *float64         `bson:"discountPrice,omitempty" json:"discountPrice"`
-	CategoryID     bson.ObjectID    `bson:"categoryId" json:"-"`
-	CategoryIDHex  string           `bson:"-" json:"categoryId"`
-	CategoryName   string           `bson:"categoryName" json:"categoryName"`
-	CategorySlug   string           `bson:"categorySlug" json:"categorySlug"`
+	ID            bson.ObjectID `bson:"_id,omitempty" json:"-"`
+	IDHex         string        `bson:"-" json:"id"`
+	Name          string        `bson:"name" json:"name"`
+	Slug          string        `bson:"slug" json:"slug"`
+	Description   string        `bson:"description" json:"description"`
+	Price         float64       `bson:"price" json:"price"`
+	Currency      string        `bson:"currency,omitempty" json:"currency"`
+	DiscountPrice *float64      `bson:"discountPrice,omitempty" json:"discountPrice"`
+	CategoryID    bson.ObjectID `bson:"categoryId" json:"-"`
+	CategoryIDHex string        `bson:"-" json:"categoryId"`
+	CategoryName  string        `bson:"categoryName" json:"categoryName"`
+	CategorySlug  string        `bson:"categorySlug" json:"categorySlug"`
+	// SellerID/SellerName record who uploaded the product, which scopes the
+	// seller console to its own catalogue. Legacy products have no seller.
+	SellerID       string           `bson:"sellerId,omitempty" json:"sellerId,omitempty"`
+	SellerName     string           `bson:"sellerName,omitempty" json:"sellerName,omitempty"`
 	Images         []string         `bson:"images" json:"images"`
 	Sizes          []string         `bson:"sizes" json:"sizes"`
 	Colors         []TeeColorOption `bson:"colors" json:"colors"`

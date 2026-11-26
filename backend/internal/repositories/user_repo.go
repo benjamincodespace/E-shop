@@ -223,6 +223,147 @@ func (r *UserRepository) ListCustomersWithStats(ctx context.Context) ([]models.C
 	return out, nil
 }
 
+func (r *UserRepository) CountByRole(ctx context.Context, role models.UserRole) (int64, error) {
+	return r.store.DB.Collection("users").CountDocuments(ctx, bson.M{"role": role})
+}
+
+// ListAllUsers returns every account regardless of role, newest first. Super
+// administrators use it to govern customers, sellers (admins) and peers.
+func (r *UserRepository) ListAllUsers(ctx context.Context) ([]models.User, error) {
+	cursor, err := r.store.DB.Collection("users").Find(
+		ctx,
+		bson.M{},
+		options.Find().SetSort(bson.D{{Key: "createdAt", Value: -1}}),
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var users []models.User
+	if err := cursor.All(ctx, &users); err != nil {
+		return nil, err
+	}
+	for i := range users {
+		users[i].HydrateIDs()
+	}
+	if users == nil {
+		users = []models.User{}
+	}
+	return users, nil
+}
+
+func (r *UserRepository) SetAvatar(ctx context.Context, idHex, avatarURL string) (*models.User, error) {
+	oid, err := bson.ObjectIDFromHex(idHex)
+	if err != nil {
+		return nil, err
+	}
+	res := r.store.DB.Collection("users").FindOneAndUpdate(
+		ctx,
+		bson.M{"_id": oid},
+		bson.M{"$set": bson.M{"avatarUrl": avatarURL, "updatedAt": time.Now().UTC()}},
+		options.FindOneAndUpdate().SetReturnDocument(options.After),
+	)
+	var u models.User
+	if err := res.Decode(&u); err != nil {
+		return nil, err
+	}
+	u.HydrateIDs()
+	return &u, nil
+}
+
+// SetApproval records a seller approval decision and, on approval, awards the
+// verified badge automatically.
+func (r *UserRepository) SetApproval(ctx context.Context, idHex, status string) (*models.User, error) {
+	oid, err := bson.ObjectIDFromHex(idHex)
+	if err != nil {
+		return nil, err
+	}
+	now := time.Now().UTC()
+	set := bson.M{"approvalStatus": status, "updatedAt": now, "verified": false}
+	if status == models.ApprovalApproved {
+		set["verified"] = true
+		set["verifiedAt"] = now
+	}
+	res := r.store.DB.Collection("users").FindOneAndUpdate(
+		ctx,
+		bson.M{"_id": oid, "role": models.RoleAdmin},
+		bson.M{"$set": set},
+		options.FindOneAndUpdate().SetReturnDocument(options.After),
+	)
+	var u models.User
+	if err := res.Decode(&u); err != nil {
+		return nil, err
+	}
+	u.HydrateIDs()
+	return &u, nil
+}
+
+// CountPendingSellers powers the super administrator approval queue badge.
+func (r *UserRepository) CountPendingSellers(ctx context.Context) (int64, error) {
+	return r.store.DB.Collection("users").CountDocuments(ctx, bson.M{
+		"role":           models.RoleAdmin,
+		"approvalStatus": models.ApprovalPending,
+	})
+}
+
+func (r *UserRepository) SetRole(ctx context.Context, idHex string, role models.UserRole) (*models.User, error) {
+	oid, err := bson.ObjectIDFromHex(idHex)
+	if err != nil {
+		return nil, err
+	}
+	res := r.store.DB.Collection("users").FindOneAndUpdate(
+		ctx,
+		bson.M{"_id": oid},
+		bson.M{"$set": bson.M{"role": role, "updatedAt": time.Now().UTC()}},
+		options.FindOneAndUpdate().SetReturnDocument(options.After),
+	)
+	var u models.User
+	if err := res.Decode(&u); err != nil {
+		return nil, err
+	}
+	u.HydrateIDs()
+	return &u, nil
+}
+
+func (r *UserRepository) DeleteUser(ctx context.Context, idHex string) error {
+	oid, err := bson.ObjectIDFromHex(idHex)
+	if err != nil {
+		return err
+	}
+	_, err = r.store.DB.Collection("users").DeleteOne(ctx, bson.M{"_id": oid})
+	return err
+}
+
+// ToggleAnyDisabled flips the disabled flag for any role, including sellers
+// and other administrators. Self-protection is enforced by the handler.
+func (r *UserRepository) ToggleAnyDisabled(ctx context.Context, userIDHex string) (*models.User, error) {
+	oid, err := bson.ObjectIDFromHex(userIDHex)
+	if err != nil {
+		return nil, nil
+	}
+	var existing models.User
+	err = r.store.DB.Collection("users").FindOne(ctx, bson.M{"_id": oid}).Decode(&existing)
+	if errors.Is(err, mongo.ErrNoDocuments) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	res := r.store.DB.Collection("users").FindOneAndUpdate(
+		ctx,
+		bson.M{"_id": oid},
+		bson.M{"$set": bson.M{"disabled": !existing.Disabled, "updatedAt": time.Now().UTC()}},
+		options.FindOneAndUpdate().SetReturnDocument(options.After),
+	)
+	var updated models.User
+	if err := res.Decode(&updated); err != nil {
+		return nil, err
+	}
+	updated.HydrateIDs()
+	return &updated, nil
+}
+
 func (r *UserRepository) ToggleDisabled(ctx context.Context, userIDHex string) (*models.User, error) {
 	oid, err := bson.ObjectIDFromHex(userIDHex)
 	if err != nil {

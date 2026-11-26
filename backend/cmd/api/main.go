@@ -46,14 +46,15 @@ func main() {
 
 	cloudinarySvc := services.NewCloudinaryService(cfg)
 
-	authH := handlers.NewAuthHandler(cfg, userRepo)
+	authH := handlers.NewAuthHandler(cfg, userRepo, cloudinarySvc)
 	catH := handlers.NewCatalogHandler(catalogRepo, reviewRepo, cloudinarySvc)
 	ordH := handlers.NewOrderHandler(orderRepo)
 	revH := handlers.NewReviewHandler(reviewRepo)
 	admH := handlers.NewAdminHandler(analyticsRepo, catalogRepo, userRepo, orderRepo)
+	superH := handlers.NewSuperAdminHandler(userRepo, catalogRepo, analyticsRepo, cloudinarySvc)
 	geoH := handlers.NewGeoHandler()
 
-	router := routes.NewRouter(cfg, authH, catH, ordH, revH, admH, geoH)
+	router := routes.NewRouter(cfg, authH, catH, ordH, revH, admH, superH, geoH)
 
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,

@@ -3,7 +3,9 @@ package handlers
 import (
 	"context"
 	"crypto/rand"
+	"errors"
 	"fmt"
+	"io"
 	"math/big"
 	"net/http"
 	"strings"
@@ -15,15 +17,17 @@ import (
 	"github.com/teestore/backend/internal/models"
 	"github.com/teestore/backend/internal/repositories"
 	"github.com/teestore/backend/internal/security"
+	"github.com/teestore/backend/internal/services"
 )
 
 type AuthHandler struct {
-	cfg      *config.Config
-	userRepo *repositories.UserRepository
+	cfg        *config.Config
+	userRepo   *repositories.UserRepository
+	cloudinary *services.CloudinaryService
 }
 
-func NewAuthHandler(cfg *config.Config, userRepo *repositories.UserRepository) *AuthHandler {
-	return &AuthHandler{cfg: cfg, userRepo: userRepo}
+func NewAuthHandler(cfg *config.Config, userRepo *repositories.UserRepository, cloudinary *services.CloudinaryService) *AuthHandler {
+	return &AuthHandler{cfg: cfg, userRepo: userRepo, cloudinary: cloudinary}
 }
 
 var (
@@ -178,10 +182,11 @@ func (h *AuthHandler) ClaimAdmin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var body struct {
-		Name     string `json:"name"`
-		Email    string `json:"email"`
-		Password string `json:"password"`
-		Passcode string `json:"passcode"`
+		Name      string `json:"name"`
+		Email     string `json:"email"`
+		Password  string `json:"password"`
+		Passcode  string `json:"passcode"`
+		AvatarURL string `json:"avatarUrl"`
 	}
 	if err := DecodeJSON(r, &body); err != nil {
 		WriteError(w, http.StatusBadRequest, "Invalid request payload.")
@@ -223,6 +228,7 @@ func (h *AuthHandler) ClaimAdmin(w http.ResponseWriter, r *http.Request) {
 
 	user := &models.User{
 		Name:         name,
+		AvatarURL:    security.SanitizeImageURL(body.AvatarURL),
 		Email:        email,
 		PasswordHash: hash,
 		Role:         models.RoleAdmin,
@@ -235,16 +241,162 @@ func (h *AuthHandler) ClaimAdmin(w http.ResponseWriter, r *http.Request) {
 	h.issueAuthResponse(w, r, http.StatusCreated, user, []string{})
 }
 
+// SuperAdminStatus tells the /admin/super portal whether the platform owner
+// account has already been created, so it can show setup instead of sign-in.
+func (h *AuthHandler) SuperAdminStatus(w http.ResponseWriter, r *http.Request) {
+	cnt, err := h.userRepo.CountByRole(r.Context(), models.RoleSuperAdmin)
+	if err != nil {
+		WriteError(w, http.StatusInternalServerError, "Unable to inspect super administrator status.")
+		return
+	}
+	WriteJSON(w, http.StatusOK, map[string]interface{}{
+		"claimed":            cnt > 0,
+		"passcodeConfigured": h.cfg.AdminPasscode != "",
+	})
+}
+
+// ClaimSuperAdmin creates the single platform-owner account. It mirrors the
+// first-run admin claim so a fresh deployment can be secured from the portal at
+// /admin/super without a manual database step.
+func (h *AuthHandler) ClaimSuperAdmin(w http.ResponseWriter, r *http.Request) {
+	cnt, err := h.userRepo.CountByRole(r.Context(), models.RoleSuperAdmin)
+	if err != nil {
+		WriteError(w, http.StatusInternalServerError, "Failed to verify super administrator setup state.")
+		return
+	}
+	if cnt >= models.MaxSuperAdmins {
+		WriteError(w, http.StatusConflict, "The maximum number of super administrator accounts has been reached.")
+		return
+	}
+	if cnt > 0 {
+		WriteError(w, http.StatusConflict, "The super administrator account already exists. Please sign in.")
+		return
+	}
+
+	var body struct {
+		Name      string `json:"name"`
+		Email     string `json:"email"`
+		Password  string `json:"password"`
+		Passcode  string `json:"passcode"`
+		AvatarURL string `json:"avatarUrl"`
+	}
+	if err := DecodeJSON(r, &body); err != nil {
+		WriteError(w, http.StatusBadRequest, "Invalid request payload.")
+		return
+	}
+
+	name := strings.TrimSpace(body.Name)
+	email := strings.ToLower(strings.TrimSpace(body.Email))
+	if h.cfg.AdminPasscode != "" && strings.TrimSpace(body.Passcode) != h.cfg.AdminPasscode {
+		WriteError(w, http.StatusForbidden, "Invalid platform setup passcode.")
+		return
+	}
+	if len(name) < 2 {
+		WriteError(w, http.StatusBadRequest, "Please enter the platform owner's full name.")
+		return
+	}
+	if !strings.Contains(email, "@") {
+		WriteError(w, http.StatusBadRequest, "Please enter a valid email address.")
+		return
+	}
+	if len(body.Password) < 8 {
+		WriteError(w, http.StatusBadRequest, "Password must be at least 8 characters.")
+		return
+	}
+	if existing, _ := h.userRepo.FindByEmail(r.Context(), email); existing != nil {
+		WriteError(w, http.StatusConflict, "An account with this email already exists.")
+		return
+	}
+
+	hash, err := security.HashPassword(body.Password)
+	if err != nil {
+		WriteError(w, http.StatusInternalServerError, "Failed to secure credentials.")
+		return
+	}
+
+	user := &models.User{
+		Name:         name,
+		AvatarURL:    security.SanitizeImageURL(body.AvatarURL),
+		Email:        email,
+		PasswordHash: hash,
+		Role:         models.RoleSuperAdmin,
+	}
+	if err := h.userRepo.CreateUser(r.Context(), user); err != nil {
+		WriteError(w, http.StatusInternalServerError, "Failed to create the super administrator account.")
+		return
+	}
+
+	h.issueAuthResponse(w, r, http.StatusCreated, user, []string{})
+}
+
+// UploadAvatar stores a profile photo for the signed-in account. Any role can
+// use it: shoppers and sellers set a picture at sign-up, the platform owner at
+// /admin/super.
+func (h *AuthHandler) UploadAvatar(w http.ResponseWriter, r *http.Request) {
+	noStore(w)
+	claims := middleware.GetUserClaims(r.Context())
+	if claims == nil {
+		WriteError(w, http.StatusUnauthorized, "Authentication required.")
+		return
+	}
+	if !h.cloudinary.Configured() {
+		WriteError(w, http.StatusServiceUnavailable, "Image storage is not configured on the API server.")
+		return
+	}
+
+	const maxUploadBytes = 5 << 20
+	r.Body = http.MaxBytesReader(w, r.Body, maxUploadBytes)
+	if err := r.ParseMultipartForm(maxUploadBytes); err != nil {
+		WriteError(w, http.StatusBadRequest, "Please upload a profile image up to 5MB.")
+		return
+	}
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		WriteError(w, http.StatusBadRequest, "No profile image was included in the upload.")
+		return
+	}
+	defer file.Close()
+
+	head := make([]byte, 512)
+	n, _ := io.ReadFull(file, head)
+	if !strings.HasPrefix(http.DetectContentType(head[:n]), "image/") {
+		WriteError(w, http.StatusBadRequest, "Only image files (JPEG, PNG, WebP, or GIF) can be uploaded.")
+		return
+	}
+	if _, err := file.Seek(0, io.SeekStart); err != nil {
+		WriteError(w, http.StatusBadRequest, "Could not read the uploaded image.")
+		return
+	}
+
+	url, err := h.cloudinary.UploadImage(r.Context(), header.Filename, file)
+	if err != nil {
+		if errors.Is(err, services.ErrCloudinaryNotConfigured) {
+			WriteError(w, http.StatusServiceUnavailable, "Image storage is not configured on the API server.")
+			return
+		}
+		WriteError(w, http.StatusBadGateway, "Profile image upload failed: "+err.Error())
+		return
+	}
+
+	user, err := h.userRepo.SetAvatar(r.Context(), claims.Sub, url)
+	if err != nil {
+		WriteError(w, http.StatusInternalServerError, "Failed to save the profile image.")
+		return
+	}
+	WriteJSON(w, http.StatusOK, map[string]interface{}{"user": user, "url": url})
+}
+
 // Register creates a shopper account. Only a phone number and password are
 // required; name, email and address stay optional.
 func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		Name     string `json:"name"`
-		Email    string `json:"email"`
-		Password string `json:"password"`
-		Phone    string `json:"phone"`
-		Address  string `json:"address"`
-		Gender   string `json:"gender"`
+		Name      string `json:"name"`
+		Email     string `json:"email"`
+		Password  string `json:"password"`
+		Phone     string `json:"phone"`
+		Address   string `json:"address"`
+		Gender    string `json:"gender"`
+		AvatarURL string `json:"avatarUrl"`
 	}
 	if err := DecodeJSON(r, &body); err != nil {
 		WriteError(w, http.StatusBadRequest, "Invalid registration payload.")
@@ -306,6 +458,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 
 	user := &models.User{
 		Name:         name,
+		AvatarURL:    security.SanitizeImageURL(body.AvatarURL),
 		Email:        email,
 		PasswordHash: hash,
 		Phone:        phone,
@@ -315,6 +468,75 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := h.userRepo.CreateUser(r.Context(), user); err != nil {
 		WriteError(w, http.StatusInternalServerError, "Registration failed.")
+		return
+	}
+
+	h.issueAuthResponse(w, r, http.StatusCreated, user, []string{})
+}
+
+// RegisterSeller creates a seller (admin) account in the pending state. A
+// seller can sign in immediately to see its approval status, but every product
+// and console action stays blocked until a super administrator verifies it.
+func (h *AuthHandler) RegisterSeller(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Name      string `json:"name"`
+		Email     string `json:"email"`
+		Password  string `json:"password"`
+		Phone     string `json:"phone"`
+		AvatarURL string `json:"avatarUrl"`
+	}
+	if err := DecodeJSON(r, &body); err != nil {
+		WriteError(w, http.StatusBadRequest, "Invalid seller registration payload.")
+		return
+	}
+
+	name := strings.TrimSpace(body.Name)
+	email := strings.ToLower(strings.TrimSpace(body.Email))
+	phone := normalizePhone(body.Phone)
+	if len(name) < 2 {
+		WriteError(w, http.StatusBadRequest, "Please enter the seller or store name.")
+		return
+	}
+	if !strings.Contains(email, "@") {
+		WriteError(w, http.StatusBadRequest, "Please enter a valid business email address.")
+		return
+	}
+	if phone != "" && !validPhone(phone) {
+		WriteError(w, http.StatusBadRequest, "Please enter a valid phone number including the country code.")
+		return
+	}
+	if len(body.Password) < 8 {
+		WriteError(w, http.StatusBadRequest, "Seller password must be at least 8 characters.")
+		return
+	}
+	if existing, _ := h.userRepo.FindByEmail(r.Context(), email); existing != nil {
+		WriteError(w, http.StatusConflict, "An account with this email already exists.")
+		return
+	}
+	if phone != "" {
+		if existing, _ := h.userRepo.FindByPhone(r.Context(), phone); existing != nil {
+			WriteError(w, http.StatusConflict, "An account with this phone number already exists.")
+			return
+		}
+	}
+
+	hash, err := security.HashPassword(body.Password)
+	if err != nil {
+		WriteError(w, http.StatusInternalServerError, "Failed to secure password.")
+		return
+	}
+
+	user := &models.User{
+		Name:           name,
+		AvatarURL:      security.SanitizeImageURL(body.AvatarURL),
+		Email:          email,
+		PasswordHash:   hash,
+		Phone:          phone,
+		Role:           models.RoleAdmin,
+		ApprovalStatus: models.ApprovalPending,
+	}
+	if err := h.userRepo.CreateUser(r.Context(), user); err != nil {
+		WriteError(w, http.StatusInternalServerError, "Seller registration failed.")
 		return
 	}
 
@@ -335,8 +557,13 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	identifier := strings.TrimSpace(body.Email)
 	email := strings.ToLower(identifier)
 	portal := "customer"
-	if body.Portal == "admin" {
+	switch body.Portal {
+	case "admin":
 		portal = "admin"
+	case "super":
+		// The /admin/super portal signs in with the same credentials but only
+		// accepts the platform owner account.
+		portal = "super"
 	}
 	if identifier == "" || body.Password == "" {
 		WriteError(w, http.StatusBadRequest, "Email or phone number and password are required.")
@@ -355,7 +582,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if portal == "admin" && h.cfg.AdminPasscode != "" && security.ConstantTimeEqual(body.Password, h.cfg.AdminPasscode) {
-		if user != nil && user.Role == models.RoleAdmin {
+		if user != nil && user.Role.IsAdminRole() {
 			if user.Disabled {
 				WriteError(w, http.StatusForbidden, "This account has been disabled.")
 				return
@@ -393,8 +620,12 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		WriteError(w, http.StatusForbidden, "This account has been disabled by an administrator.")
 		return
 	}
-	if portal == "admin" && user.Role != models.RoleAdmin {
+	if portal == "admin" && !user.Role.IsAdminRole() {
 		WriteError(w, http.StatusForbidden, "Administrator credentials are required for the Admin Panel.")
+		return
+	}
+	if portal == "super" && user.Role != models.RoleSuperAdmin {
+		WriteError(w, http.StatusForbidden, "Super administrator credentials are required for this portal.")
 		return
 	}
 
@@ -465,6 +696,14 @@ func (h *AuthHandler) Session(w http.ResponseWriter, r *http.Request) {
 			"purchasedProductIds": []string{},
 		})
 		return
+	}
+
+	// A super administrator approving a seller must not require that seller to
+	// sign out: refresh the cookies as soon as the approval state changes.
+	if claims := middleware.GetUserClaims(r.Context()); claims != nil {
+		if claims.Role != user.Role || claims.Approved != user.IsApprovedSeller() {
+			extraCookiesNeeded = true
+		}
 	}
 
 	if extraCookiesNeeded {

@@ -107,8 +107,27 @@ func RequireAuth(cfg *config.Config, next http.HandlerFunc) http.HandlerFunc {
 func RequireAdmin(cfg *config.Config, next http.HandlerFunc) http.HandlerFunc {
 	return RequireAuth(cfg, func(w http.ResponseWriter, r *http.Request) {
 		claims := GetUserClaims(r.Context())
-		if claims == nil || claims.Role != models.RoleAdmin {
-			writeJSONError(w, http.StatusForbidden, "Administrator permissions required")
+		if claims == nil || !claims.Role.IsAdminRole() {
+			writeJSONError(w, http.StatusForbidden, "Seller permissions required")
+			return
+		}
+		// A seller that has not been verified by a super administrator can sign
+		// in to see its approval state, but every seller action stays blocked.
+		if claims.Role == models.RoleAdmin && !claims.Approved {
+			writeJSONError(w, http.StatusForbidden, "Your seller account is awaiting super administrator approval")
+			return
+		}
+		next(w, r)
+	})
+}
+
+// RequireSuperAdmin limits platform-wide user and product control to the super
+// administrator account created through the /admin/super portal.
+func RequireSuperAdmin(cfg *config.Config, next http.HandlerFunc) http.HandlerFunc {
+	return RequireAuth(cfg, func(w http.ResponseWriter, r *http.Request) {
+		claims := GetUserClaims(r.Context())
+		if claims == nil || claims.Role != models.RoleSuperAdmin {
+			writeJSONError(w, http.StatusForbidden, "Super administrator permissions required")
 			return
 		}
 		next(w, r)

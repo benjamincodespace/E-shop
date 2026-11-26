@@ -22,8 +22,37 @@ func NewAnalyticsRepository(store *StoreDB) *AnalyticsRepository {
 
 var monthNames = []string{"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"}
 
+// GetAnalytics aggregates the whole platform for the super administrator.
 func (r *AnalyticsRepository) GetAnalytics(ctx context.Context) (*models.AnalyticsData, error) {
-	pCur, err := r.store.DB.Collection("products").Find(ctx, bson.M{}, options.Find().SetSort(bson.D{{Key: "createdAt", Value: -1}}))
+	return r.getAnalytics(ctx, bson.M{}, bson.M{}, false)
+}
+
+// GetSellerAnalytics aggregates only the products uploaded by one seller and
+// the orders that contain them, so a seller never sees another seller's numbers.
+func (r *AnalyticsRepository) GetSellerAnalytics(ctx context.Context, sellerID string) (*models.AnalyticsData, error) {
+	productFilter := bson.M{"sellerId": sellerID}
+
+	idCur, err := r.store.DB.Collection("products").Find(ctx, productFilter)
+	if err != nil {
+		return nil, err
+	}
+	var owned []models.Product
+	if err := idCur.All(ctx, &owned); err != nil {
+		idCur.Close(ctx)
+		return nil, err
+	}
+	idCur.Close(ctx)
+
+	ids := make([]string, 0, len(owned))
+	for i := range owned {
+		ids = append(ids, owned[i].ID.Hex())
+	}
+	orderFilter := bson.M{"items.productId": bson.M{"$in": ids}}
+	return r.getAnalytics(ctx, productFilter, orderFilter, true)
+}
+
+func (r *AnalyticsRepository) getAnalytics(ctx context.Context, productFilter, orderFilter bson.M, sellerScope bool) (*models.AnalyticsData, error) {
+	pCur, err := r.store.DB.Collection("products").Find(ctx, productFilter, options.Find().SetSort(bson.D{{Key: "createdAt", Value: -1}}))
 	if err != nil {
 		return nil, err
 	}
@@ -61,7 +90,7 @@ func (r *AnalyticsRepository) GetAnalytics(ctx context.Context) (*models.Analyti
 	}
 
 	// Non-cancelled orders aggregation
-	oCur, err := r.store.DB.Collection("orders").Find(ctx, bson.M{}, options.Find().SetSort(bson.D{{Key: "createdAt", Value: -1}}))
+	oCur, err := r.store.DB.Collection("orders").Find(ctx, orderFilter, options.Find().SetSort(bson.D{{Key: "createdAt", Value: -1}}))
 	if err != nil {
 		return nil, err
 	}
@@ -150,7 +179,19 @@ func (r *AnalyticsRepository) GetAnalytics(ctx context.Context) (*models.Analyti
 		topProducts = topProducts[:5]
 	}
 
-	totalCustomers, _ := r.store.DB.Collection("users").CountDocuments(ctx, bson.M{"role": models.RoleCustomer})
+	totalCustomers := int64(0)
+	if sellerScope {
+		// For a seller, "customers" means the distinct buyers in its orders.
+		seen := make(map[string]bool)
+		for i := range allOrders {
+			if allOrders[i].UserID != nil {
+				seen[allOrders[i].UserID.Hex()] = true
+			}
+		}
+		totalCustomers = int64(len(seen))
+	} else {
+		totalCustomers, _ = r.store.DB.Collection("users").CountDocuments(ctx, bson.M{"role": models.RoleCustomer})
+	}
 
 	recentOrders := allOrders
 	if len(recentOrders) > 6 {
