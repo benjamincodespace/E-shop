@@ -80,8 +80,17 @@ export const FloatingCartButton: React.FC = () => {
   const hidden = HIDDEN_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
   if (hidden) return null;
 
+  // With an empty cart the button is not shown, but it stays mounted so the
+  // fly-to-cart animation still has a target when the first product is added.
+  const hasItems = itemCount > 0;
+
   return (
-    <div className="fixed z-40 right-4 sm:right-6 bottom-[calc(env(safe-area-inset-bottom)+5.5rem)] lg:bottom-6 flex items-center gap-2 print:hidden">
+    <div
+      className={`fixed z-40 right-4 sm:right-6 bottom-[calc(env(safe-area-inset-bottom)+5.5rem)] lg:bottom-6 flex items-center gap-2 print:hidden transition-all duration-300 ease-out ${
+        hasItems ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 translate-y-2 scale-90 pointer-events-none'
+      }`}
+      aria-hidden={!hasItems}
+    >
       <span
         aria-hidden="true"
         className={`hidden sm:inline-flex items-center whitespace-nowrap rounded-full bg-neutral-950 text-white text-[11px] font-semibold px-3 py-1.5 shadow-lg transition-all duration-300 ease-out ${
@@ -95,6 +104,8 @@ export const FloatingCartButton: React.FC = () => {
         ref={buttonRef}
         type="button"
         onClick={() => router.push('/cart')}
+        disabled={!hasItems}
+        tabIndex={hasItems ? 0 : -1}
         aria-label={`${t('nav.cart')} — ${itemCount} ${itemCount === 1 ? 'item' : 'items'}`}
         className={`relative w-14 h-14 rounded-full bg-neutral-950 text-white flex items-center justify-center shadow-[0_12px_32px_rgba(0,0,0,0.28)] hover:bg-neutral-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-950 transition-colors cursor-pointer ${
           highlight ? 'ring-2 ring-white/70' : ''
