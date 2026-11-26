@@ -1,15 +1,16 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Heart, Home, LayoutGrid, Search, Settings, ShoppingCart, UserPlus } from 'lucide-react';
+import { Heart, Home, LayoutGrid, Search, Settings, ShoppingCart } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
 import { calculateCartSummary } from '@/lib/storeLogic';
 import { useAutoHideBars } from '@/hooks/useAutoHideBars';
 import { BrandLogo } from './BrandLogo';
 import { CurrencySwitcher } from './CurrencySwitcher';
+import { UserMenu } from './UserMenu';
 
 export const StoreHeader: React.FC = () => {
-  const { route, navigate, cart, wishlistIds, globalSearch, setGlobalSearch, user, setSettingsOpen, t } = useStore();
+  const { route, navigate, cart, wishlistIds, globalSearch, setGlobalSearch, setSettingsOpen, t } = useStore();
   const barsHidden = useAutoHideBars();
   const [localSearch, setLocalSearch] = useState(globalSearch);
   const { itemCount } = calculateCartSummary(cart);
@@ -119,14 +120,7 @@ export const StoreHeader: React.FC = () => {
           <div className="hidden md:block">
             <CurrencySwitcher />
           </div>
-          <button
-            type="button"
-            onClick={() => navigate({ page: 'signup' })}
-            aria-label={user ? 'Your account' : 'Create an account'}
-            className="relative w-10 h-10 rounded-full hover:bg-neutral-100 flex items-center justify-center text-neutral-800 transition-colors cursor-pointer"
-          >
-            <UserPlus className="w-4.5 h-4.5" />
-          </button>
+          <UserMenu />
 
           <button
             type="button"
