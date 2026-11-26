@@ -8,12 +8,10 @@ import {
   Heart,
   Home,
   LayoutGrid,
-  Package,
   RefreshCw,
   ShieldCheck,
   Shirt,
   Truck,
-  User as UserIcon,
 } from 'lucide-react';
 import type { Category, Product } from '@/types/store';
 import { useStore } from '@/context/StoreContext';
@@ -127,23 +125,6 @@ export const StorefrontHome: React.FC<StorefrontHomeProps> = ({
               <span>Favorites</span>
             </button>
 
-            <button
-              type="button"
-              onClick={() => navigate({ page: 'orders' })}
-              className="w-full flex items-center gap-3 px-4 py-2.5 rounded-2xl text-neutral-700 hover:bg-neutral-100 text-sm font-medium transition-colors cursor-pointer"
-            >
-              <Package className="w-4 h-4 shrink-0" />
-              <span>My Orders</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => navigate({ page: 'profile' })}
-              className="w-full flex items-center gap-3 px-4 py-2.5 rounded-2xl text-neutral-700 hover:bg-neutral-100 text-sm font-medium transition-colors cursor-pointer"
-            >
-              <UserIcon className="w-4 h-4 shrink-0" />
-              <span>Profile</span>
-            </button>
           </nav>
 
           {/* Free Shipping Promo Card */}
@@ -284,7 +265,7 @@ export const StorefrontHome: React.FC<StorefrontHomeProps> = ({
 
           {/* Product Grid */}
           {loading ? (
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3.5">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
               {[1, 2, 3, 4, 5, 6].map((n) => (
                 <ProductCardSkeleton key={n} />
               ))}
@@ -304,7 +285,7 @@ export const StorefrontHome: React.FC<StorefrontHomeProps> = ({
               </button>
             </div>
           ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3.5">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
               {displayProducts.map((prod) => (
                 <ProductCard
                   key={prod.id}

@@ -84,7 +84,10 @@ func (r *AnalyticsRepository) GetAnalytics(ctx context.Context) (*models.Analyti
 			continue
 		}
 		totalOrders++
-		totalSales += o.Total
+		// Reports are normalised to USD so orders placed in different
+		// currencies can be compared and totalled together.
+		orderTotalUSD := services.ConvertCurrency(o.Total, o.Currency, models.DefaultCurrency)
+		totalSales += orderTotalUSD
 
 		ym := o.CreatedAt.UTC().Format("2006-01")
 		sp, ok := monthlyMap[ym]
@@ -97,12 +100,13 @@ func (r *AnalyticsRepository) GetAnalytics(ctx context.Context) (*models.Analyti
 			sp = &models.SalesPoint{Label: lbl}
 			monthlyMap[ym] = sp
 		}
-		sp.Sales = services.Round2(sp.Sales + o.Total)
+		sp.Sales = services.Round2(sp.Sales + orderTotalUSD)
 		sp.Orders++
 
 		for _, item := range o.Items {
 			prodUnits[item.ProductID] += int64(item.Quantity)
-			prodRev[item.ProductID] = services.Round2(prodRev[item.ProductID] + item.UnitPrice*float64(item.Quantity))
+			itemRevenueUSD := services.ConvertCurrency(item.UnitPrice*float64(item.Quantity), o.Currency, models.DefaultCurrency)
+			prodRev[item.ProductID] = services.Round2(prodRev[item.ProductID] + itemRevenueUSD)
 		}
 	}
 

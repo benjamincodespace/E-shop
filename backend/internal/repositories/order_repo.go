@@ -263,16 +263,24 @@ type CheckoutInput struct {
 	Address       string
 	Notes         string
 	PaymentMethod string
+	Currency      string
 	Items         []CheckoutLineInput
 }
 
 // PlaceOrderAtomic uses a MongoDB multi-document ACID transaction + conditional stock decrement
 // to guarantee no overselling and consistent order + inventory log + cart clearing.
 func (r *OrderRepository) PlaceOrderAtomic(ctx context.Context, in CheckoutInput) (*models.Order, error) {
-	uid, err := bson.ObjectIDFromHex(in.UserID)
-	if err != nil {
-		return nil, err
+	// Guest checkout has no account, so the order simply carries no userId.
+	var uid *bson.ObjectID
+	if trimmed := strings.TrimSpace(in.UserID); trimmed != "" {
+		parsed, err := bson.ObjectIDFromHex(trimmed)
+		if err != nil {
+			return nil, err
+		}
+		uid = &parsed
 	}
+
+	orderCurrency := services.NormalizeCurrency(in.Currency)
 
 	session, err := r.store.Client.StartSession()
 	if err != nil {
@@ -318,7 +326,13 @@ func (r *OrderRepository) PlaceOrderAtomic(ctx context.Context, in CheckoutInput
 				return nil, err
 			}
 
-			unitPrice := services.GetEffectivePrice(beforeProd.Price, beforeProd.DiscountPrice)
+			// Convert each product's own pricing currency into the currency the
+			// shopper checked out with, so mixed-currency carts total correctly.
+			unitPrice := services.ConvertCurrencyRounded(
+				services.GetEffectivePrice(beforeProd.Price, beforeProd.DiscountPrice),
+				beforeProd.Currency,
+				orderCurrency,
+			)
 			subtotal += unitPrice * float64(line.Quantity)
 
 			img := "/images/tee_black_classic_1795513062767.jpg"
@@ -359,8 +373,8 @@ func (r *OrderRepository) PlaceOrderAtomic(ctx context.Context, in CheckoutInput
 			})
 		}
 
-		subtotal = services.Round2(subtotal)
-		shippingFee, total := services.CalculateShippingAndTotal(subtotal)
+		subtotal = services.RoundCurrency(subtotal, orderCurrency)
+		shippingFee, total := services.CalculateShippingAndTotalForCurrency(subtotal, orderCurrency)
 
 		order := models.Order{
 			ID:            bson.NewObjectID(),
@@ -371,6 +385,7 @@ func (r *OrderRepository) PlaceOrderAtomic(ctx context.Context, in CheckoutInput
 			Phone:         in.Phone,
 			Address:       in.Address,
 			Notes:         in.Notes,
+			Currency:      orderCurrency,
 			Subtotal:      subtotal,
 			ShippingFee:   shippingFee,
 			Total:         total,
@@ -389,8 +404,10 @@ func (r *OrderRepository) PlaceOrderAtomic(ctx context.Context, in CheckoutInput
 				return nil, err
 			}
 		}
-		if _, err := r.store.DB.Collection("carts").DeleteMany(sessCtx, bson.M{"userId": uid}); err != nil {
-			return nil, err
+		if uid != nil {
+			if _, err := r.store.DB.Collection("carts").DeleteMany(sessCtx, bson.M{"userId": *uid}); err != nil {
+				return nil, err
+			}
 		}
 
 		order.HydrateIDs()

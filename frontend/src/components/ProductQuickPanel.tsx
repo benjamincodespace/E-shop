@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { ArrowRight, Heart, MessageCircle, Minus, Plus, ShoppingCart, Star } from 'lucide-react';
+import { ArrowRight, Heart, Minus, Plus, ShoppingCart, Star } from 'lucide-react';
 import type { Product, Review, TeeSize } from '@/types/store';
 import { calculateDiscountPercent, getEffectivePrice } from '@/lib/storeLogic';
 import { api } from '@/services/api';
@@ -13,15 +13,11 @@ interface ProductQuickPanelProps {
 }
 
 export const ProductQuickPanel: React.FC<ProductQuickPanelProps> = ({ product }) => {
-  const { addToCart, toggleWishlist, wishlistIds, navigate, user, purchasedProductIds, notify, refreshCatalog } =
-    useStore();
+  const { addToCart, toggleWishlist, wishlistIds, navigate } = useStore();
   const [selectedSize, setSelectedSize] = useState<TeeSize>('M');
   const [selectedColor, setSelectedColor] = useState<string>('Black');
   const [quantity, setQuantity] = useState(1);
   const [reviews, setReviews] = useState<Review[]>([]);
-  const [quickComment, setQuickComment] = useState('');
-  const [quickRating, setQuickRating] = useState(5);
-  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     if (!product) return;
@@ -47,37 +43,6 @@ export const ProductQuickPanel: React.FC<ProductQuickPanelProps> = ({ product })
   const discountPct = calculateDiscountPercent(product.price, product.discountPrice);
   const isFav = wishlistIds.includes(product.id);
   const outOfStock = product.stock <= 0;
-  const canReview = Boolean(user && purchasedProductIds.includes(product.id));
-
-  const handleQuickReview = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!user) {
-      notify('Please sign in and purchase this T-shirt to leave a verified review.', 'info');
-      navigate({ page: 'auth' });
-      return;
-    }
-    if (!canReview) {
-      notify('Verified purchase required before posting a review for this item.', 'error');
-      return;
-    }
-    if (!quickComment.trim()) return;
-    setSubmitting(true);
-    try {
-      const res = await api.submitReview(product.id, {
-        rating: quickRating,
-        comment: quickComment.trim(),
-      });
-      setReviews((prev) => [res.review, ...prev]);
-      setQuickComment('');
-      notify('Review posted!', 'success');
-      refreshCatalog();
-    } catch (err) {
-      notify(err instanceof Error ? err.message : 'Could not post review.', 'error');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
   return (
     <aside className="bg-white border border-neutral-200/80 rounded-2xl p-5 shadow-[0_4px_20px_rgba(0,0,0,0.03)]">
       <div className="flex flex-col sm:flex-row xl:flex-row gap-4">
@@ -250,7 +215,7 @@ export const ProductQuickPanel: React.FC<ProductQuickPanelProps> = ({ product })
 
         <div className="space-y-3">
           {reviews.length === 0 ? (
-            <p className="text-xs text-neutral-500">No reviews yet. Be the first verified buyer to review.</p>
+            <p className="text-xs text-neutral-500">No verified buyer reviews yet.</p>
           ) : (
             reviews.slice(0, 2).map((rev) => (
               <div key={rev.id} className="pb-3 border-b border-neutral-100 last:border-b-0 last:pb-0">
@@ -286,47 +251,6 @@ export const ProductQuickPanel: React.FC<ProductQuickPanelProps> = ({ product })
           )}
         </div>
 
-        <form onSubmit={handleQuickReview} className="mt-4">
-          {canReview && (
-            <div className="flex items-center gap-1 mb-2">
-              {[1, 2, 3, 4, 5].map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  onClick={() => setQuickRating(s)}
-                  aria-label={`Rate ${s} stars`}
-                  className="p-0.5 cursor-pointer"
-                >
-                  <Star
-                    className={`w-3.5 h-3.5 ${
-                      s <= quickRating ? 'fill-neutral-950 text-neutral-950' : 'text-neutral-300'
-                    }`}
-                  />
-                </button>
-              ))}
-            </div>
-          )}
-          <div className="flex items-center gap-2">
-            <div className="flex-1 flex items-center gap-2 bg-neutral-100 rounded-full px-3 py-2">
-              <MessageCircle className="w-3.5 h-3.5 text-neutral-400 shrink-0" />
-              <input
-                type="text"
-                value={quickComment}
-                onChange={(e) => setQuickComment(e.target.value)}
-                placeholder={canReview ? 'Add a verified comment...' : 'Add a comment...'}
-                aria-label="Add a comment"
-                className="w-full bg-transparent text-xs text-neutral-900 placeholder:text-neutral-400 focus:outline-none"
-              />
-            </div>
-            <button
-              type="submit"
-              disabled={submitting}
-              className="px-4 py-2 rounded-full bg-neutral-950 text-white text-xs font-semibold hover:bg-neutral-800 transition-colors whitespace-nowrap cursor-pointer"
-            >
-              Post
-            </button>
-          </div>
-        </form>
       </div>
     </aside>
   );

@@ -145,7 +145,9 @@ func (r *CatalogRepository) ListProducts(ctx context.Context, q ProductQuery) ([
 				continue
 			}
 		}
-		eff := services.GetEffectivePrice(p.Price, p.DiscountPrice)
+		// Price filters and sorting are expressed in USD, so products priced in
+		// different currencies compare on the same scale.
+		eff := services.ConvertCurrencyRounded(services.GetEffectivePrice(p.Price, p.DiscountPrice), p.Currency, models.DefaultCurrency)
 		if !matchesPriceRange(eff, q.PriceRange) {
 			continue
 		}
@@ -185,6 +187,10 @@ func (r *CatalogRepository) ListProducts(ctx context.Context, q ProductQuery) ([
 	}, nil
 }
 
+func effectivePriceUSD(p models.Product) float64 {
+	return services.ConvertCurrency(services.GetEffectivePrice(p.Price, p.DiscountPrice), p.Currency, models.DefaultCurrency)
+}
+
 func matchesPriceRange(price float64, r string) bool {
 	switch r {
 	case "0-15":
@@ -206,9 +212,9 @@ func sortProducts(items []models.Product, sortBy string) {
 			swap := false
 			switch sortBy {
 			case "price-asc":
-				swap = services.GetEffectivePrice(items[j].Price, items[j].DiscountPrice) < services.GetEffectivePrice(items[i].Price, items[i].DiscountPrice)
+				swap = effectivePriceUSD(items[j]) < effectivePriceUSD(items[i])
 			case "price-desc":
-				swap = services.GetEffectivePrice(items[j].Price, items[j].DiscountPrice) > services.GetEffectivePrice(items[i].Price, items[i].DiscountPrice)
+				swap = effectivePriceUSD(items[j]) > effectivePriceUSD(items[i])
 			case "rating":
 				swap = items[j].WeightedScore > items[i].WeightedScore
 			default:

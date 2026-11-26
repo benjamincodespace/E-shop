@@ -11,6 +11,7 @@ import {
   LayoutDashboard,
   LogOut,
   MessageSquare,
+  MoreHorizontal,
   Plus,
   Search,
   Settings,
@@ -39,6 +40,7 @@ import type {
 import { BrandLogo } from './BrandLogo';
 import { SafeImage } from './SafeImage';
 import { computeWeightedRatingScore, getEffectivePrice, getStockBadgeInfo, slugifyProductName } from '@/lib/storeLogic';
+import { useAutoHideBars } from '@/lib/useAutoHideBars';
 
 type AdminTab = 'dashboard' | 'products' | 'orders' | 'customers' | 'reviews' | 'analytics' | 'settings';
 
@@ -53,6 +55,17 @@ const STUDIO_PRESET_IMAGES = [
 const ALL_SIZES: TeeSize[] = ['S', 'M', 'L', 'XL', 'XXL'];
 const ORDER_STATUSES: OrderStatus[] = ['Pending', 'Confirmed', 'Processing', 'Shipped', 'Delivered', 'Cancelled'];
 
+// Mirrors the server-side transition rules so the admin only sees statuses the
+// API will actually accept.
+const ORDER_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
+  Pending: ['Confirmed', 'Processing', 'Cancelled'],
+  Confirmed: ['Processing', 'Shipped', 'Cancelled'],
+  Processing: ['Shipped', 'Cancelled'],
+  Shipped: ['Delivered'],
+  Delivered: [],
+  Cancelled: [],
+};
+
 export const AdminDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }) => {
   const { user, authReady, categories, loginUser, claimAdminAccount, logoutUser, navigate, notify, refreshCatalog } =
     useStore();
@@ -61,6 +74,11 @@ export const AdminDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }
     const valid: AdminTab[] = ['dashboard', 'products', 'orders', 'customers', 'reviews', 'analytics', 'settings'];
     return valid.includes(initialTab as AdminTab) ? (initialTab as AdminTab) : 'dashboard';
   });
+
+  // Tuck the admin app bar and mobile bottom bar away while scrolling, then
+  // glide them back as soon as scrolling settles.
+  const barsHidden = useAutoHideBars();
+  const [moreOpen, setMoreOpen] = useState(false);
 
   useEffect(() => {
     const valid: AdminTab[] = ['dashboard', 'products', 'orders', 'customers', 'reviews', 'analytics', 'settings'];
@@ -185,7 +203,7 @@ export const AdminDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }
     e.preventDefault();
     setAuthSubmitting(true);
     try {
-      await loginUser(authEmail, authPassword, 'admin');
+      await loginUser(authEmail, authPassword);
       notify('Signed in to TeeStore Admin Panel', 'success');
     } catch (err) {
       notify(err instanceof Error ? err.message : 'Admin sign-in failed.', 'error');
@@ -236,41 +254,38 @@ export const AdminDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }
 
   const handleImageFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
+    e.target.value = '';
+    if (!file || uploadingImg) return;
+    if (!file.type.startsWith('image/')) {
+      notify('Please choose a JPEG, PNG, WebP, or GIF image.', 'error');
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      notify('Image must be 10MB or smaller.', 'error');
+      return;
+    }
     setUploadingImg(true);
     try {
-      const sig = await api.getCloudinarySignature();
-      if (!sig.configured || !sig.cloudName || !sig.apiKey || !sig.signature || !sig.timestamp) {
-        throw new Error(
-          'Cloudinary is not configured on the Go API server. Set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET or choose a Studio preset below.',
-        );
-      }
-      const fd = new FormData();
-      fd.append('file', file);
-      fd.append('api_key', sig.apiKey);
-      fd.append('timestamp', String(sig.timestamp));
-      fd.append('folder', sig.folder || 'teestore/products');
-      fd.append('signature', sig.signature);
-      const cloudRes = await fetch(`https://api.cloudinary.com/v1_1/${sig.cloudName}/image/upload`, {
-        method: 'POST',
-        body: fd,
-      });
-      const cloudData = (await cloudRes.json()) as { secure_url?: string; error?: { message?: string } };
-      if (!cloudRes.ok || !cloudData.secure_url) {
-        throw new Error(cloudData.error?.message || 'Cloudinary upload failed');
-      }
-      setFormImages((prev) => [...prev, cloudData.secure_url!]);
-      notify('Uploaded image to Cloudinary', 'success');
+      const uploaded = await api.uploadProductImage(file);
+      setFormImages((prev) => [...prev, uploaded.url]);
+      notify('Image saved to Cloudinary', 'success');
     } catch (err) {
       notify(err instanceof Error ? err.message : 'Image upload failed.', 'error');
     } finally {
       setUploadingImg(false);
-      e.target.value = '';
     }
   };
 
   const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (categories.length === 0) {
+      notify('Create a category before saving a product.', 'error');
+      return;
+    }
+    if (formImages.length === 0) {
+      notify('Add at least one product image.', 'error');
+      return;
+    }
     setSavingProduct(true);
     try {
       const colors = formColorsText
@@ -410,7 +425,7 @@ export const AdminDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }
   }
 
   if (!user || user.role !== 'admin') {
-    const showFirstRunClaim = adminStatus && !adminStatus.claimed && !adminStatus.passcodeConfigured;
+    const showFirstRunClaim = adminStatus && !adminStatus.claimed;
 
     return (
       <div className="min-h-screen bg-neutral-50 flex flex-col items-center justify-center px-4 py-12">
@@ -494,6 +509,22 @@ export const AdminDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }
                   className="w-full rounded-xl border border-neutral-200 px-3.5 py-2.5 text-sm focus:outline-none focus:border-neutral-950"
                 />
               </div>
+              {adminStatus?.passcodeConfigured && (
+                <div>
+                  <label htmlFor="adm-claim-passcode" className="block text-xs font-semibold text-neutral-800 mb-1">
+                    Admin Setup Passcode
+                  </label>
+                  <input
+                    id="adm-claim-passcode"
+                    type="password"
+                    required
+                    value={authPasscode}
+                    onChange={(e) => setAuthPasscode(e.target.value)}
+                    placeholder="Server ADMIN_PASSCODE"
+                    className="w-full rounded-xl border border-neutral-200 px-3.5 py-2.5 text-sm focus:outline-none focus:border-neutral-950"
+                  />
+                </div>
+              )}
               <button
                 type="submit"
                 disabled={authSubmitting}
@@ -662,7 +693,14 @@ export const AdminDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }
       {/* Main Content */}
       <div className="flex-1 min-w-0 pb-24 lg:pb-10">
         {/* Top Admin Bar */}
-        <header className="glass-surface border-b border-neutral-200/80 px-4 sm:px-8 py-3.5 sticky top-0 z-20 flex items-center justify-between gap-4">
+        <header
+          className={`glass-surface border-b border-neutral-200/80 px-4 sm:px-8 py-3.5 sticky top-0 z-20 flex items-center justify-between gap-4 transition-[transform,opacity] will-change-transform ${
+            barsHidden
+              ? '-translate-y-full opacity-0 pointer-events-none duration-200 ease-[cubic-bezier(0.4,0,1,1)]'
+              : 'translate-y-0 opacity-100 duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]'
+          }`}
+          inert={barsHidden}
+        >
           <div className="flex items-center gap-3">
             <div className="lg:hidden">
               <BrandLogo subtitle="Admin Panel" />
@@ -1166,13 +1204,14 @@ export const AdminDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }
                           <select
                             aria-label={`Update status for order ${ord.orderNumber}`}
                             value={ord.status}
-                            disabled={ord.status === 'Delivered' || ord.status === 'Cancelled'}
+                            disabled={ORDER_TRANSITIONS[ord.status].length === 0}
                             onChange={(e) => handleOrderStatusChange(ord.id, e.target.value as OrderStatus)}
                             className="rounded-full border border-neutral-200 bg-neutral-50 px-3 py-1.5 text-xs font-semibold text-neutral-900 focus:outline-none focus:border-neutral-950 disabled:opacity-60"
                           >
-                            {ORDER_STATUSES.map((st) => (
+                            <option value={ord.status}>{ord.status} (current)</option>
+                            {ORDER_TRANSITIONS[ord.status].map((st) => (
                               <option key={st} value={st}>
-                                {st}
+                                Move to {st}
                               </option>
                             ))}
                           </select>
@@ -1445,8 +1484,38 @@ export const AdminDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }
       {/* Mobile Admin Bottom Navigation */}
       <nav
         aria-label="Mobile Admin Navigation"
-        className="lg:hidden fixed bottom-0 inset-x-0 z-30 glass-surface border-t border-neutral-200/80 px-2 py-2 flex items-center justify-around"
+        className={`lg:hidden fixed bottom-0 inset-x-0 z-30 glass-surface border-t border-neutral-200/80 px-2 py-2 flex items-center justify-around transition-[transform,opacity] will-change-transform ${
+          barsHidden
+            ? 'translate-y-[120%] opacity-0 pointer-events-none duration-200 ease-[cubic-bezier(0.4,0,1,1)]'
+            : 'translate-y-0 opacity-100 duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]'
+        }`}
+        inert={barsHidden}
       >
+        {moreOpen && (
+          <div className="absolute bottom-full right-3 mb-2 w-48 rounded-2xl border border-neutral-200 bg-white p-1.5 shadow-[0_16px_40px_rgba(0,0,0,0.14)]">
+            {navItems
+              .filter((item) => item.id === 'reviews' || item.id === 'analytics' || item.id === 'settings')
+              .map((item) => {
+                const Icon = item.icon;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => {
+                      setTab(item.id);
+                      setMoreOpen(false);
+                    }}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-semibold cursor-pointer ${
+                      tab === item.id ? 'bg-neutral-950 text-white' : 'text-neutral-700 hover:bg-neutral-100'
+                    }`}
+                  >
+                    <Icon className="w-4 h-4" />
+                    <span>{item.label}</span>
+                  </button>
+                );
+              })}
+          </div>
+        )}
         {(
           [
             { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -1461,7 +1530,10 @@ export const AdminDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }
             <button
               key={item.id}
               type="button"
-              onClick={() => setTab(item.id)}
+              onClick={() => {
+                setTab(item.id);
+                setMoreOpen(false);
+              }}
               className={`flex flex-col items-center gap-0.5 px-3 py-1 rounded-xl text-[11px] font-semibold cursor-pointer ${
                 active ? 'text-neutral-950' : 'text-neutral-400'
               }`}
@@ -1472,6 +1544,23 @@ export const AdminDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }
             </button>
           );
         })}
+        <button
+          type="button"
+          onClick={() => setMoreOpen((open) => !open)}
+          aria-expanded={moreOpen}
+          aria-haspopup="menu"
+          className={`flex flex-col items-center gap-0.5 px-3 py-1 rounded-xl text-[11px] font-semibold cursor-pointer ${
+            moreOpen || tab === 'reviews' || tab === 'analytics' || tab === 'settings'
+              ? 'text-neutral-950'
+              : 'text-neutral-400'
+          }`}
+        >
+          <MoreHorizontal className="w-5 h-5" />
+          <span>More</span>
+          {(tab === 'reviews' || tab === 'analytics' || tab === 'settings') && (
+            <span className="w-4 h-0.5 rounded-full bg-neutral-950 mt-0.5" />
+          )}
+        </button>
       </nav>
 
       {/* Customer Orders Drawer Modal */}
@@ -1658,7 +1747,13 @@ export const AdminDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }
                   <label className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-neutral-100 hover:bg-neutral-200 text-xs font-semibold text-neutral-900 cursor-pointer">
                     <CloudUpload className="w-3.5 h-3.5" />
                     <span>{uploadingImg ? 'Uploading...' : 'Upload to Cloudinary'}</span>
-                    <input type="file" accept="image/png,image/jpeg,image/webp" onChange={handleImageFileUpload} className="hidden" />
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp,image/gif"
+                      disabled={uploadingImg}
+                      onChange={handleImageFileUpload}
+                      className="hidden"
+                    />
                   </label>
                 </div>
                 <div className="flex flex-wrap gap-2">

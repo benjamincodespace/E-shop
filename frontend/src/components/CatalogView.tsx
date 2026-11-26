@@ -227,7 +227,7 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
           </div>
 
           {loading ? (
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               {[1, 2, 3, 4, 5, 6].map((n) => (
                 <ProductCardSkeleton key={n} />
               ))}
@@ -250,7 +250,7 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
             <div
               className={
                 viewMode === 'grid'
-                  ? 'grid grid-cols-2 sm:grid-cols-3 gap-4'
+                  ? 'grid grid-cols-1 sm:grid-cols-3 gap-4'
                   : 'flex flex-col gap-3.5'
               }
             >

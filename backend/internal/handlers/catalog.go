@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"errors"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -120,6 +122,7 @@ type productPayload struct {
 	Slug           string                  `json:"slug"`
 	Description    string                  `json:"description"`
 	Price          float64                 `json:"price"`
+	Currency       string                  `json:"currency"`
 	DiscountPrice  *float64                `json:"discountPrice"`
 	CategoryID     string                  `json:"categoryId"`
 	Images         []string                `json:"images"`
@@ -215,11 +218,14 @@ func (h *CatalogHandler) CreateProduct(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	currency := services.NormalizeCurrency(body.Currency)
+
 	prod := &models.Product{
 		Name:           name,
 		Slug:           slug,
 		Description:    desc,
-		Price:          services.Round2(body.Price),
+		Price:          services.RoundCurrency(body.Price, currency),
+		Currency:       currency,
 		DiscountPrice:  body.DiscountPrice,
 		CategoryID:     cat.ID,
 		CategoryName:   cat.Name,
@@ -277,6 +283,10 @@ func (h *CatalogHandler) UpdateProduct(w http.ResponseWriter, r *http.Request) {
 	price := body.Price
 	if price <= 0 {
 		price = existing.Price
+	}
+	currency := existing.Currency
+	if strings.TrimSpace(body.Currency) != "" {
+		currency = services.NormalizeCurrency(body.Currency)
 	}
 	if body.DiscountPrice != nil && (*body.DiscountPrice <= 0 || *body.DiscountPrice >= price) {
 		WriteError(w, http.StatusBadRequest, "Discount price must be less than regular price.")
@@ -347,7 +357,8 @@ func (h *CatalogHandler) UpdateProduct(w http.ResponseWriter, r *http.Request) {
 		"name":           name,
 		"slug":           slug,
 		"description":    desc,
-		"price":          services.Round2(price),
+		"price":          services.RoundCurrency(price, currency),
+		"currency":       currency,
 		"discountPrice":  body.DiscountPrice,
 		"categoryId":     catID,
 		"categoryName":   catName,
@@ -400,4 +411,51 @@ func (h *CatalogHandler) DeleteProduct(w http.ResponseWriter, r *http.Request) {
 func (h *CatalogHandler) CloudinarySignature(w http.ResponseWriter, r *http.Request) {
 	sig := h.cloudinary.GenerateUploadSignature(time.Now().Unix())
 	WriteJSON(w, http.StatusOK, sig)
+}
+
+// UploadImage accepts one product image from the admin dashboard, uploads it to
+// Cloudinary server-side, and returns the secure delivery URL to store on the
+// product. Saving the image only after Cloudinary confirms keeps catalogue
+// records from pointing at images that were never persisted.
+func (h *CatalogHandler) UploadImage(w http.ResponseWriter, r *http.Request) {
+	if !h.cloudinary.Configured() {
+		WriteError(w, http.StatusServiceUnavailable, "Cloudinary is not configured on the API server. Set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET.")
+		return
+	}
+
+	const maxUploadBytes = 10 << 20
+	r.Body = http.MaxBytesReader(w, r.Body, maxUploadBytes)
+	if err := r.ParseMultipartForm(maxUploadBytes); err != nil {
+		WriteError(w, http.StatusBadRequest, "Please upload a single image up to 10MB.")
+		return
+	}
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		WriteError(w, http.StatusBadRequest, "No image file was included in the upload.")
+		return
+	}
+	defer file.Close()
+
+	head := make([]byte, 512)
+	n, _ := io.ReadFull(file, head)
+	contentType := http.DetectContentType(head[:n])
+	if !strings.HasPrefix(contentType, "image/") {
+		WriteError(w, http.StatusBadRequest, "Only image files (JPEG, PNG, WebP, or GIF) can be uploaded.")
+		return
+	}
+	if _, err := file.Seek(0, io.SeekStart); err != nil {
+		WriteError(w, http.StatusBadRequest, "Could not read the uploaded image.")
+		return
+	}
+
+	secureURL, err := h.cloudinary.UploadImage(r.Context(), header.Filename, file)
+	if err != nil {
+		if errors.Is(err, services.ErrCloudinaryNotConfigured) {
+			WriteError(w, http.StatusServiceUnavailable, "Cloudinary is not configured on the API server.")
+			return
+		}
+		WriteError(w, http.StatusBadGateway, "Cloudinary upload failed: "+err.Error())
+		return
+	}
+	WriteJSON(w, http.StatusCreated, map[string]string{"url": secureURL})
 }

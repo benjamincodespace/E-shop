@@ -1,6 +1,5 @@
 import type {
   AnalyticsData,
-  CartItem,
   Category,
   InventoryLog,
   Order,
@@ -60,13 +59,10 @@ async function tryRefreshAccessToken(): Promise<string | null> {
 // Endpoints that must never loop through the refresh-and-retry cycle.
 const NO_RETRY_AUTH_PATHS = [
   '/api/auth/login',
-  '/api/auth/register',
   '/api/auth/admin/claim',
   '/api/auth/refresh',
   '/api/auth/logout',
   '/api/auth/session',
-  '/api/auth/forgot-password',
-  '/api/auth/reset-password',
 ];
 
 function canRefreshAndRetry(path: string): boolean {
@@ -76,7 +72,8 @@ function canRefreshAndRetry(path: string): boolean {
 async function apiRequest<T>(path: string, options: RequestInit = {}, allowRetry = true): Promise<T> {
   const headers = new Headers(options.headers || {});
   headers.set('X-Requested-With', 'TeeStore');
-  if (options.body && !headers.has('Content-Type')) {
+  const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
+  if (options.body && !isFormData && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json');
   }
   if (inMemoryToken) {
@@ -115,13 +112,8 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(payload),
     }),
-  register: (payload: { name: string; phone: string; password: string; email?: string; address?: string }) =>
-    apiRequest<{ user: User; token: string; purchasedProductIds: string[] }>('/api/auth/register', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    }),
-  // `email` accepts either an email address or a phone number.
-  login: (payload: { email: string; password: string; portal?: 'customer' | 'admin' }) =>
+  // Admin console sign-in only; shoppers check out as guests.
+  login: (payload: { email: string; password: string; portal: 'admin' }) =>
     apiRequest<{ user: User; token: string; purchasedProductIds: string[] }>('/api/auth/login', {
       method: 'POST',
       body: JSON.stringify(payload),
@@ -129,23 +121,6 @@ export const api = {
   logout: () => apiRequest<{ ok: boolean }>('/api/auth/logout', { method: 'POST' }),
   session: () =>
     apiRequest<{ authenticated: boolean; user: User | null; purchasedProductIds: string[] }>('/api/auth/session'),
-  me: () => apiRequest<{ user: User; purchasedProductIds: string[] }>('/api/auth/me'),
-  updateProfile: (payload: { name: string; phone: string; address: string }) =>
-    apiRequest<{ user: User }>('/api/auth/profile', {
-      method: 'PUT',
-      body: JSON.stringify(payload),
-    }),
-  // `email` accepts either an email address or a phone number.
-  forgotPassword: (email: string) =>
-    apiRequest<{ message: string; previewResetCode?: string }>('/api/auth/forgot-password', {
-      method: 'POST',
-      body: JSON.stringify({ email }),
-    }),
-  resetPassword: (payload: { email: string; code: string; newPassword: string }) =>
-    apiRequest<{ message: string }>('/api/auth/reset-password', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    }),
 
   // Catalog & Products
   getCategories: () => apiRequest<{ categories: Category[] }>('/api/categories'),
@@ -187,35 +162,6 @@ export const api = {
       };
     }>(`/api/products/${encodeURIComponent(slug)}`),
 
-  // Cart & Wishlist
-  getCart: () => apiRequest<{ items: CartItem[] }>('/api/cart'),
-  addToCart: (payload: { productId: string; size: string; color: string; quantity: number }) =>
-    apiRequest<{ items: CartItem[] }>('/api/cart', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    }),
-  syncCart: (items: Array<{ productId: string; size: string; color: string; quantity: number }>) =>
-    apiRequest<{ items: CartItem[] }>('/api/cart/sync', {
-      method: 'POST',
-      body: JSON.stringify({ items }),
-    }),
-  updateCartItem: (productId: string, payload: { size: string; color: string; quantity: number }) =>
-    apiRequest<{ items: CartItem[] }>(`/api/cart/${encodeURIComponent(productId)}`, {
-      method: 'PUT',
-      body: JSON.stringify(payload),
-    }),
-  removeCartItem: (productId: string, size: string, color: string) =>
-    apiRequest<{ items: CartItem[] }>(
-      `/api/cart/${encodeURIComponent(productId)}?size=${encodeURIComponent(size)}&color=${encodeURIComponent(color)}`,
-      { method: 'DELETE' },
-    ),
-
-  getWishlist: () => apiRequest<{ products: Product[] }>('/api/wishlist'),
-  addWishlist: (productId: string) =>
-    apiRequest<{ ok: boolean }>(`/api/wishlist/${encodeURIComponent(productId)}`, { method: 'POST' }),
-  removeWishlist: (productId: string) =>
-    apiRequest<{ ok: boolean }>(`/api/wishlist/${encodeURIComponent(productId)}`, { method: 'DELETE' }),
-
   // Orders
   createOrder: (payload: {
     customerName: string;
@@ -229,7 +175,6 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(payload),
     }),
-  getMyOrders: () => apiRequest<{ orders: Order[] }>('/api/orders/my-orders'),
 
   // Reviews
   getProductReviews: (productId: string) =>
@@ -241,23 +186,6 @@ export const api = {
         breakdown: Array<{ stars: number; count: number; percentage: number }>;
       };
     }>(`/api/products/${encodeURIComponent(productId)}/reviews`),
-  getMyReviews: () => apiRequest<{ reviews: Review[] }>('/api/reviews/my-reviews'),
-  submitReview: (productId: string, payload: { rating: number; comment: string }) =>
-    apiRequest<{ review: Review }>(`/api/products/${encodeURIComponent(productId)}/reviews`, {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    }),
-  updateReview: (reviewId: string, payload: { rating: number; comment: string }) =>
-    apiRequest<{ review: Review }>(`/api/reviews/${encodeURIComponent(reviewId)}`, {
-      method: 'PUT',
-      body: JSON.stringify(payload),
-    }),
-  deleteReview: (reviewId: string) =>
-    apiRequest<{ ok: boolean }>(`/api/reviews/${encodeURIComponent(reviewId)}`, { method: 'DELETE' }),
-  toggleReviewLike: (reviewId: string) =>
-    apiRequest<{ liked: boolean; helpfulCount: number }>(`/api/reviews/${encodeURIComponent(reviewId)}/like`, {
-      method: 'POST',
-    }),
 
   // Newsletter
   subscribeNewsletter: (email: string) =>
@@ -297,6 +225,11 @@ export const api = {
       folder?: string;
       signature?: string;
     }>('/api/admin/cloudinary-signature', { method: 'POST' }),
+  uploadProductImage: (file: File) => {
+    const form = new FormData();
+    form.append('file', file);
+    return apiRequest<{ url: string }>('/api/admin/uploads', { method: 'POST', body: form });
+  },
   getAdminOrders: (params?: { status?: string; search?: string }) => {
     const qs = new URLSearchParams();
     if (params?.status) qs.set('status', params.status);

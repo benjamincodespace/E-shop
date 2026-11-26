@@ -1,3 +1,5 @@
+export type CurrencyCode = 'USD' | 'EUR' | 'TZS' | 'RWF' | 'XOF';
+
 export type UserRole = 'customer' | 'admin';
 
 export type OrderStatus =
@@ -42,6 +44,7 @@ export interface Product {
   slug: string;
   description: string;
   price: number;
+  currency: CurrencyCode;
   discountPrice: number | null;
   categoryId: string;
   categoryName: string;
@@ -113,6 +116,7 @@ export interface Order {
   phone: string;
   address: string;
   notes: string;
+  currency: CurrencyCode;
   subtotal: number;
   shippingFee: number;
   total: number;

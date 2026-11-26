@@ -1,68 +1,14 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Heart, Home, LayoutGrid, Search, ShoppingCart, User as UserIcon } from 'lucide-react';
+import { Heart, Home, LayoutGrid, Search, ShoppingCart } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
 import { calculateCartSummary } from '@/lib/storeLogic';
+import { useAutoHideBars } from '@/lib/useAutoHideBars';
 import { BrandLogo } from './BrandLogo';
 
-/**
- * Tucks the sticky header and the fixed mobile bottom bar away while the
- * customer scrolls up, and brings them back as soon as they scroll down again
- * (they are always visible at the top of the page). Scroll events are captured
- * at the window so nested scroll containers (the desktop product column)
- * drive it too.
- */
-function useAutoHideBars(): boolean {
-  const [hidden, setHidden] = useState(false);
-
-  useEffect(() => {
-    const positions = new Map<EventTarget, number>();
-    let frame = 0;
-
-    const onScroll = (event: Event) => {
-      const target = event.target as EventTarget;
-      const element = target instanceof HTMLElement ? target : null;
-      const y = element ? element.scrollTop : window.scrollY;
-      const previous = positions.get(target);
-      positions.set(target, y);
-      if (previous === undefined) return;
-
-      const delta = y - previous;
-      if (y <= 16) {
-        if (frame) cancelAnimationFrame(frame);
-        frame = 0;
-        setHidden(false);
-        return;
-      }
-      if (frame || Math.abs(delta) < 8) return;
-      frame = requestAnimationFrame(() => {
-        frame = 0;
-        // Scrolling up hides both bars; scrolling down shows them again.
-        setHidden(delta < 0);
-      });
-    };
-
-    window.addEventListener('scroll', onScroll, { capture: true, passive: true });
-    return () => {
-      if (frame) cancelAnimationFrame(frame);
-      window.removeEventListener('scroll', onScroll, { capture: true });
-    };
-  }, []);
-
-  // Lets the desktop home frame expand while the header is out of the way.
-  useEffect(() => {
-    document.documentElement.dataset.barsHidden = hidden ? 'true' : 'false';
-    return () => {
-      delete document.documentElement.dataset.barsHidden;
-    };
-  }, [hidden]);
-
-  return hidden;
-}
-
 export const StoreHeader: React.FC = () => {
-  const { route, navigate, cart, wishlistIds, user, globalSearch, setGlobalSearch } = useStore();
+  const { route, navigate, cart, wishlistIds, globalSearch, setGlobalSearch } = useStore();
   const barsHidden = useAutoHideBars();
   const [localSearch, setLocalSearch] = useState(globalSearch);
   const { itemCount } = calculateCartSummary(cart);
@@ -82,8 +28,10 @@ export const StoreHeader: React.FC = () => {
 
   return (
     <header
-      className={`sticky top-0 z-30 glass-surface border-b border-neutral-200/80 transition-transform duration-300 ease-out ${
-        barsHidden ? '-translate-y-full' : 'translate-y-0'
+      className={`sticky top-0 z-30 glass-surface border-b border-neutral-200/80 transition-[transform,opacity] will-change-transform ${
+        barsHidden
+          ? '-translate-y-full opacity-0 pointer-events-none duration-200 ease-[cubic-bezier(0.4,0,1,1)]'
+          : 'translate-y-0 opacity-100 duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]'
       }`}
       inert={barsHidden ? true : undefined}
     >
@@ -156,7 +104,7 @@ export const StoreHeader: React.FC = () => {
           </form>
         </div>
 
-        {/* Zone 3: Wishlist, Cart Badge, User Profile */}
+        {/* Zone 3: Wishlist and Cart Badge */}
         <div className="flex items-center gap-2 sm:gap-3 shrink-0">
           <button
             type="button"
@@ -184,15 +132,6 @@ export const StoreHeader: React.FC = () => {
             )}
           </button>
 
-          <button
-            type="button"
-            onClick={() => navigate({ page: user ? 'profile' : 'auth' })}
-            aria-label={user ? `Account (${user.name})` : 'Sign in'}
-            className="h-9 px-3 rounded-full bg-neutral-950 text-white text-xs font-semibold inline-flex items-center gap-1.5 hover:bg-neutral-800 transition-colors cursor-pointer whitespace-nowrap"
-          >
-            <UserIcon className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">{user ? user.name.split(' ')[0] : 'Sign In'}</span>
-          </button>
         </div>
       </div>
 
@@ -221,28 +160,29 @@ export const StoreHeader: React.FC = () => {
 };
 
 export const MobileBottomNav: React.FC = () => {
-  const { route, navigate, user } = useStore();
+  const { route, navigate } = useStore();
   const barsHidden = useAutoHideBars();
 
   const items = [
     { page: 'home' as const, label: 'Home', icon: Home },
     { page: 'catalog' as const, label: 'Categories', icon: LayoutGrid },
     { page: 'favorites' as const, label: 'Favorites', icon: Heart },
-    { page: user ? ('profile' as const) : ('auth' as const), label: 'Profile', icon: UserIcon },
+    { page: 'cart' as const, label: 'Cart', icon: ShoppingCart },
   ];
 
   return (
     <nav
       aria-label="Mobile navigation"
-      className={`lg:hidden fixed bottom-0 inset-x-0 z-30 glass-surface border-t border-neutral-200/80 px-2 py-2 flex items-center justify-around transition-transform duration-300 ease-out ${
-        barsHidden ? 'translate-y-full' : 'translate-y-0'
+      className={`lg:hidden fixed bottom-0 inset-x-0 z-30 glass-surface border-t border-neutral-200/80 px-2 py-2 flex items-center justify-around transition-[transform,opacity] will-change-transform ${
+        barsHidden
+          ? 'translate-y-[120%] opacity-0 pointer-events-none duration-200 ease-[cubic-bezier(0.4,0,1,1)]'
+          : 'translate-y-0 opacity-100 duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]'
       }`}
       inert={barsHidden ? true : undefined}
     >
       {items.map((it) => {
         const Icon = it.icon;
-        const active =
-          route.page === it.page || (it.page === 'profile' && (route.page === 'orders' || route.page === 'auth'));
+        const active = route.page === it.page;
         return (
           <button
             key={it.label}

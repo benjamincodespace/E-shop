@@ -13,9 +13,6 @@ export type AppRoute =
   | { page: 'favorites' }
   | { page: 'cart' }
   | { page: 'checkout' }
-  | { page: 'orders' }
-  | { page: 'profile' }
-  | { page: 'auth' }
   | { page: 'about' }
   | { page: 'admin'; tab?: string };
 
@@ -39,9 +36,6 @@ export function parsePathname(pathname: string, search = ''): AppRoute {
   if (clean === '/favorites') return { page: 'favorites' };
   if (clean === '/cart') return { page: 'cart' };
   if (clean === '/checkout') return { page: 'checkout' };
-  if (clean === '/orders') return { page: 'orders' };
-  if (clean === '/profile') return { page: 'profile' };
-  if (clean === '/auth') return { page: 'auth' };
   if (clean === '/about') return { page: 'about' };
   if (clean.startsWith('/admin')) {
     const tab = clean.slice('/admin'.length).replace(/^\//, '') || 'dashboard';
@@ -62,12 +56,6 @@ export function routeToUrl(route: AppRoute): string {
       return '/cart';
     case 'checkout':
       return '/checkout';
-    case 'orders':
-      return '/orders';
-    case 'profile':
-      return '/profile';
-    case 'auth':
-      return '/auth';
     case 'about':
       return '/about';
     case 'admin':
@@ -81,9 +69,9 @@ export function routeToUrl(route: AppRoute): string {
 interface StoreContextValue {
   route: AppRoute;
   navigate: (route: AppRoute) => void;
+  /** Only an admin session ever populates this; shoppers check out as guests. */
   user: User | null;
   authReady: boolean;
-  purchasedProductIds: string[];
   categories: Category[];
   products: Product[];
   productsLoading: boolean;
@@ -105,14 +93,7 @@ interface StoreContextValue {
   removeFromCart: (productId: string, size: TeeSize, color: string) => Promise<void>;
   clearCartLocal: () => void;
   toggleWishlist: (product: Product) => Promise<void>;
-  loginUser: (email: string, password: string, portal?: 'customer' | 'admin') => Promise<User>;
-  registerUser: (payload: {
-    name: string;
-    phone: string;
-    password: string;
-    email?: string;
-    address?: string;
-  }) => Promise<User>;
+  loginUser: (email: string, password: string) => Promise<User>;
   claimAdminAccount: (payload: {
     name: string;
     email: string;
@@ -123,6 +104,22 @@ interface StoreContextValue {
 }
 
 const StoreContext = createContext<StoreContextValue | null>(null);
+
+// Guest shoppers have no server-side storage, so their cart and favorites are
+// kept in the browser between visits.
+const GUEST_CART_KEY = 'teestore_guest_cart';
+const GUEST_WISHLIST_KEY = 'teestore_guest_wishlist';
+
+function isCartItem(value: unknown): value is CartItem {
+  if (!value || typeof value !== 'object') return false;
+  const item = value as Partial<CartItem>;
+  return (
+    typeof item.productId === 'string' &&
+    typeof item.size === 'string' &&
+    typeof item.color === 'string' &&
+    typeof item.quantity === 'number'
+  );
+}
 
 export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const router = useRouter();
@@ -137,7 +134,6 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const [user, setUser] = useState<User | null>(null);
   const [authReady, setAuthReady] = useState(false);
-  const [purchasedProductIds, setPurchasedProductIds] = useState<string[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [productsLoading, setProductsLoading] = useState(true);
@@ -208,39 +204,59 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   }, [pickDefaultSelected]);
 
-  const loadAuthenticatedUserExtras = useCallback(async () => {
-    try {
-      const [cartRes, wishRes] = await Promise.all([api.getCart(), api.getWishlist()]);
-      setCart(cartRes.items);
-      setWishlistIds(wishRes.products.map((p) => p.id));
-    } catch {
-      // ignore
-    }
-  }, []);
-
   const refreshAuth = useCallback(async () => {
     try {
       const res = await api.session();
-      if (res.authenticated && res.user) {
-        setUser(res.user);
-        setPurchasedProductIds(res.purchasedProductIds);
-        await loadAuthenticatedUserExtras();
-      } else {
-        setUser(null);
-        setPurchasedProductIds([]);
-      }
+      setUser(res.authenticated && res.user ? res.user : null);
     } catch {
       setUser(null);
-      setPurchasedProductIds([]);
     } finally {
       setAuthReady(true);
     }
-  }, [loadAuthenticatedUserExtras]);
+  }, []);
 
   useEffect(() => {
     refreshCatalog();
     refreshAuth();
   }, [refreshCatalog, refreshAuth]);
+
+  const [storageReady, setStorageReady] = useState(false);
+
+  useEffect(() => {
+    try {
+      const savedCart = window.localStorage.getItem(GUEST_CART_KEY);
+      const savedWishlist = window.localStorage.getItem(GUEST_WISHLIST_KEY);
+      const cartItems: unknown = savedCart ? JSON.parse(savedCart) : null;
+      const wishlistValues: unknown = savedWishlist ? JSON.parse(savedWishlist) : null;
+      if (Array.isArray(cartItems)) {
+        setCart(cartItems.filter(isCartItem));
+      }
+      if (Array.isArray(wishlistValues)) {
+        setWishlistIds(wishlistValues.filter((id): id is string => typeof id === 'string'));
+      }
+    } catch {
+      // Unreadable storage: start with an empty cart instead of failing to render.
+    }
+    setStorageReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (!storageReady) return;
+    try {
+      window.localStorage.setItem(GUEST_CART_KEY, JSON.stringify(cart));
+    } catch {
+      // Storage can be full or blocked; the in-memory cart still works.
+    }
+  }, [cart, storageReady]);
+
+  useEffect(() => {
+    if (!storageReady) return;
+    try {
+      window.localStorage.setItem(GUEST_WISHLIST_KEY, JSON.stringify(wishlistIds));
+    } catch {
+      // Storage can be full or blocked; favorites still work for this visit.
+    }
+  }, [wishlistIds, storageReady]);
 
   const addToCart = useCallback(
     async (product: Product, size?: TeeSize, color?: string, quantity = 1) => {
@@ -250,22 +266,6 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }
       const chosenSize: TeeSize = size || product.sizes[1] || product.sizes[0] || 'M';
       const chosenColor = color || product.colors[0]?.name || 'Black';
-
-      if (user) {
-        try {
-          const res = await api.addToCart({
-            productId: product.id,
-            size: chosenSize,
-            color: chosenColor,
-            quantity,
-          });
-          setCart(res.items);
-          notify(`Added ${product.name} (${chosenSize}) to cart`, 'success');
-        } catch (err) {
-          notify(err instanceof Error ? err.message : 'Could not update cart.', 'error');
-        }
-        return;
-      }
 
       setCart((prev) => {
         const idx = prev.findIndex(
@@ -299,21 +299,11 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       });
       notify(`Added ${product.name} (${chosenSize}) to cart`, 'success');
     },
-    [user, notify],
+    [notify],
   );
 
   const updateCartQty = useCallback(
     async (productId: string, size: TeeSize, color: string, quantity: number) => {
-      if (user) {
-        try {
-          const res = await api.updateCartItem(productId, { size, color, quantity });
-          setCart(res.items);
-        } catch (err) {
-          notify(err instanceof Error ? err.message : 'Failed to update quantity.', 'error');
-        }
-        return;
-      }
-
       setCart((prev) => {
         if (quantity <= 0) {
           return prev.filter((i) => !(i.productId === productId && i.size === size && i.color === color));
@@ -325,28 +315,17 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         );
       });
     },
-    [user, notify],
+    [notify],
   );
 
   const removeFromCart = useCallback(
     async (productId: string, size: TeeSize, color: string) => {
-      if (user) {
-        try {
-          const res = await api.removeCartItem(productId, size, color);
-          setCart(res.items);
-          notify('Removed item from cart', 'info');
-        } catch (err) {
-          notify(err instanceof Error ? err.message : 'Failed to remove item.', 'error');
-        }
-        return;
-      }
-
       setCart((prev) =>
         prev.filter((i) => !(i.productId === productId && i.size === size && i.color === color)),
       );
       notify('Removed item from cart', 'info');
     },
-    [user, notify],
+    [notify],
   );
 
   const clearCartLocal = useCallback(() => {
@@ -356,23 +335,6 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const toggleWishlist = useCallback(
     async (product: Product) => {
       const exists = wishlistIds.includes(product.id);
-      if (user) {
-        try {
-          if (exists) {
-            await api.removeWishlist(product.id);
-            setWishlistIds((prev) => prev.filter((id) => id !== product.id));
-            notify(`Removed ${product.name} from favorites`, 'info');
-          } else {
-            await api.addWishlist(product.id);
-            setWishlistIds((prev) => [product.id, ...prev]);
-            notify(`Saved ${product.name} to favorites`, 'success');
-          }
-        } catch (err) {
-          notify(err instanceof Error ? err.message : 'Wishlist update failed.', 'error');
-        }
-        return;
-      }
-
       if (exists) {
         setWishlistIds((prev) => prev.filter((id) => id !== product.id));
         notify(`Removed ${product.name} from favorites`, 'info');
@@ -381,76 +343,22 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         notify(`Saved ${product.name} to favorites`, 'success');
       }
     },
-    [user, wishlistIds, notify],
+    [wishlistIds, notify],
   );
 
-  const syncGuestStateAfterAuth = useCallback(async (guestCart: CartItem[], guestWishlist: string[]) => {
-    // Authentication has already succeeded here: a sync hiccup must not be reported
-    // as a failed sign-in, and the guest cart should stay on screen if the upload fails.
-    try {
-      if (guestCart.length > 0) {
-        const synced = await api.syncCart(
-          guestCart.map((c) => ({
-            productId: c.productId,
-            size: c.size,
-            color: c.color,
-            quantity: c.quantity,
-          })),
-        );
-        setCart(synced.items);
-      } else {
-        const current = await api.getCart();
-        setCart(current.items);
-      }
-
-      for (const pid of guestWishlist) {
-        try {
-          await api.addWishlist(pid);
-        } catch {
-          // ignore
-        }
-      }
-      const wishRes = await api.getWishlist();
-      setWishlistIds(wishRes.products.map((p) => p.id));
-    } catch {
-      // Keep the local guest cart/wishlist as-is so the user does not lose their picks.
-    }
+  // Shopper accounts are gone: the only sign-in is the store admin console.
+  const loginUser = useCallback(async (email: string, password: string) => {
+    const res = await api.login({ email, password, portal: 'admin' });
+    setAuthToken(res.token);
+    setUser(res.user);
+    return res.user;
   }, []);
-
-  const loginUser = useCallback(
-    async (email: string, password: string, portal: 'customer' | 'admin' = 'customer') => {
-      const guestCart = [...cart];
-      const guestWishlist = [...wishlistIds];
-      const res = await api.login({ email, password, portal });
-      setAuthToken(res.token);
-      setUser(res.user);
-      setPurchasedProductIds(res.purchasedProductIds);
-      await syncGuestStateAfterAuth(guestCart, guestWishlist);
-      return res.user;
-    },
-    [cart, wishlistIds, syncGuestStateAfterAuth],
-  );
-
-  const registerUser = useCallback(
-    async (payload: { name: string; phone: string; password: string; email?: string; address?: string }) => {
-      const guestCart = [...cart];
-      const guestWishlist = [...wishlistIds];
-      const res = await api.register(payload);
-      setAuthToken(res.token);
-      setUser(res.user);
-      setPurchasedProductIds(res.purchasedProductIds);
-      await syncGuestStateAfterAuth(guestCart, guestWishlist);
-      return res.user;
-    },
-    [cart, wishlistIds, syncGuestStateAfterAuth],
-  );
 
   const claimAdminAccount = useCallback(
     async (payload: { name: string; email: string; password: string; passcode?: string }) => {
       const res = await api.claimAdmin(payload);
       setAuthToken(res.token);
       setUser(res.user);
-      setPurchasedProductIds(res.purchasedProductIds);
       return res.user;
     },
     [],
@@ -460,10 +368,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     await api.logout();
     setAuthToken(null);
     setUser(null);
-    setPurchasedProductIds([]);
-    setCart([]);
-    setWishlistIds([]);
-    notify('Signed out of TeeStore', 'info');
+    notify('Signed out of TeeStore Admin', 'info');
   }, [notify]);
 
   return (
@@ -473,7 +378,6 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         navigate,
         user,
         authReady,
-        purchasedProductIds,
         categories,
         products,
         productsLoading,
@@ -496,7 +400,6 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         clearCartLocal,
         toggleWishlist,
         loginUser,
-        registerUser,
         claimAdminAccount,
         logoutUser,
       }}

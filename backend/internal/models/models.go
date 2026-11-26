@@ -13,6 +13,9 @@ const (
 	RoleAdmin    UserRole = "admin"
 )
 
+// DefaultCurrency is the canonical pricing currency for legacy records.
+const DefaultCurrency = "USD"
+
 type OrderStatus string
 
 const (
@@ -77,6 +80,7 @@ type Product struct {
 	Slug           string           `bson:"slug" json:"slug"`
 	Description    string           `bson:"description" json:"description"`
 	Price          float64          `bson:"price" json:"price"`
+	Currency       string           `bson:"currency,omitempty" json:"currency"`
 	DiscountPrice  *float64         `bson:"discountPrice,omitempty" json:"discountPrice"`
 	CategoryID     bson.ObjectID    `bson:"categoryId" json:"-"`
 	CategoryIDHex  string           `bson:"-" json:"categoryId"`
@@ -114,13 +118,15 @@ type Order struct {
 	ID            bson.ObjectID `bson:"_id,omitempty" json:"-"`
 	IDHex         string        `bson:"-" json:"id"`
 	OrderNumber   string        `bson:"orderNumber" json:"orderNumber"`
-	UserID        bson.ObjectID `bson:"userId" json:"-"`
-	UserIDHex     string        `bson:"-" json:"userId"`
+	// Nil for guest checkout orders, which carry no account.
+	UserID        *bson.ObjectID `bson:"userId,omitempty" json:"-"`
+	UserIDHex     string         `bson:"-" json:"userId"`
 	CustomerName  string        `bson:"customerName" json:"customerName"`
 	CustomerEmail string        `bson:"customerEmail,omitempty" json:"customerEmail,omitempty"`
 	Phone         string        `bson:"phone" json:"phone"`
 	Address       string        `bson:"address" json:"address"`
 	Notes         string        `bson:"notes" json:"notes"`
+	Currency      string        `bson:"currency,omitempty" json:"currency"`
 	Subtotal      float64       `bson:"subtotal" json:"subtotal"`
 	ShippingFee   float64       `bson:"shippingFee" json:"shippingFee"`
 	Total         float64       `bson:"total" json:"total"`
@@ -275,11 +281,19 @@ func (c *Category) HydrateIDs() {
 func (p *Product) HydrateIDs() {
 	p.IDHex = p.ID.Hex()
 	p.CategoryIDHex = p.CategoryID.Hex()
+	if p.Currency == "" {
+		p.Currency = DefaultCurrency
+	}
 }
 
 func (o *Order) HydrateIDs() {
 	o.IDHex = o.ID.Hex()
-	o.UserIDHex = o.UserID.Hex()
+	if o.Currency == "" {
+		o.Currency = DefaultCurrency
+	}
+	if o.UserID != nil {
+		o.UserIDHex = o.UserID.Hex()
+	}
 }
 
 func (r *Review) HydrateIDs(currentUserID *bson.ObjectID) {

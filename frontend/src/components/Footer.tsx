@@ -65,11 +65,6 @@ export const Footer: React.FC = () => {
           <h3 className="font-display text-xs font-bold text-neutral-950 mb-3">Customer Care</h3>
           <ul className="space-y-2 text-xs text-neutral-600">
             <li>
-              <button type="button" onClick={() => navigate({ page: 'orders' })} className="hover:text-neutral-950 cursor-pointer">
-                Track Order
-              </button>
-            </li>
-            <li>
               <button type="button" onClick={() => navigate({ page: 'favorites' })} className="hover:text-neutral-950 cursor-pointer">
                 Saved Favorites
               </button>

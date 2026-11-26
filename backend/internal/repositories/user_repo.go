@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/teestore/backend/internal/models"
+	"github.com/teestore/backend/internal/services"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
@@ -176,9 +177,11 @@ func (r *UserRepository) ListCustomersWithStats(ctx context.Context) ([]models.C
 		spent := 0.0
 		for _, o := range doc.UserOrders {
 			if o.Status != models.OrderCancelled {
-				spent += o.Total
+				// Customer spend is reported in the canonical USD base.
+				spent += services.ConvertCurrency(o.Total, o.Currency, models.DefaultCurrency)
 			}
 		}
+		spent = services.Round2(spent)
 		out = append(out, models.CustomerSummary{
 			User:       doc.User,
 			OrderCount: len(doc.UserOrders),

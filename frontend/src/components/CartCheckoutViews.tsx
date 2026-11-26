@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { ArrowRight, CheckCircle2, Minus, Plus, ShoppingBag, Trash2 } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
 import { calculateCartSummary } from '@/lib/storeLogic';
@@ -149,24 +149,18 @@ export const CartView: React.FC = () => {
 };
 
 export const CheckoutView: React.FC = () => {
-  const { user, cart, clearCartLocal, navigate, notify, refreshCatalog, refreshAuth } = useStore();
+  const { cart, clearCartLocal, navigate, notify, refreshCatalog } = useStore();
   const summary = calculateCartSummary(cart);
 
-  const [customerName, setCustomerName] = useState(user?.name || '');
-  const [phone, setPhone] = useState(user?.phone || '');
-  const [address, setAddress] = useState(user?.address || '');
+  // Guest checkout: every order is placed with the name, phone and address
+  // entered here, no account required.
+  const [customerName, setCustomerName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [address, setAddress] = useState('');
   const [notes, setNotes] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('Cash on Delivery');
   const [submitting, setSubmitting] = useState(false);
   const [confirmedOrder, setConfirmedOrder] = useState<Order | null>(null);
-
-  useEffect(() => {
-    if (user) {
-      setCustomerName((prev) => prev || user.name);
-      setPhone((prev) => prev || user.phone);
-      setAddress((prev) => prev || user.address);
-    }
-  }, [user]);
 
   if (confirmedOrder) {
     return (
@@ -211,38 +205,13 @@ export const CheckoutView: React.FC = () => {
           <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
             <button
               type="button"
-              onClick={() => navigate({ page: 'orders' })}
-              className="px-6 py-2.5 rounded-full bg-neutral-950 text-white text-xs font-semibold cursor-pointer"
-            >
-              View Order History
-            </button>
-            <button
-              type="button"
               onClick={() => navigate({ page: 'catalog' })}
-              className="px-6 py-2.5 rounded-full border border-neutral-200 text-xs font-semibold text-neutral-800 hover:border-neutral-950 cursor-pointer"
+              className="px-6 py-2.5 rounded-full bg-neutral-950 text-white text-xs font-semibold cursor-pointer"
             >
               Continue Shopping
             </button>
           </div>
         </div>
-      </div>
-    );
-  }
-
-  if (!user) {
-    return (
-      <div className="max-w-xl mx-auto px-4 py-14 text-center">
-        <h1 className="font-display text-2xl font-bold text-neutral-950">Sign in to Complete Checkout</h1>
-        <p className="mt-2 text-sm text-neutral-600">
-          Your cart items are preserved. Sign in or register in seconds to track your order and verify future reviews.
-        </p>
-        <button
-          type="button"
-          onClick={() => navigate({ page: 'auth' })}
-          className="mt-6 px-6 py-3 rounded-full bg-neutral-950 text-white text-xs font-semibold cursor-pointer"
-        >
-          Sign In / Create Account
-        </button>
       </div>
     );
   }
@@ -282,7 +251,7 @@ export const CheckoutView: React.FC = () => {
       clearCartLocal();
       setConfirmedOrder(res.order);
       notify(`Order ${res.order.orderNumber} placed successfully!`, 'success');
-      await Promise.all([refreshCatalog(), refreshAuth()]);
+      await refreshCatalog();
     } catch (err) {
       notify(err instanceof Error ? err.message : 'Checkout failed.', 'error');
     } finally {

@@ -27,7 +27,6 @@ func NewRouter(
 	// Auth
 	mux.HandleFunc("GET /api/auth/admin/status", authH.AdminStatus)
 	mux.HandleFunc("POST /api/auth/admin/claim", middleware.RateLimit(rl, 10, time.Minute, authH.ClaimAdmin))
-	mux.HandleFunc("POST /api/auth/register", middleware.RateLimit(rl, 15, time.Minute, authH.Register))
 	mux.HandleFunc("POST /api/auth/login", middleware.RateLimit(rl, 20, time.Minute, authH.Login))
 	mux.HandleFunc("POST /api/auth/refresh", authH.Refresh)
 	mux.HandleFunc("POST /api/auth/logout", authH.Logout)
@@ -46,6 +45,7 @@ func NewRouter(
 	mux.HandleFunc("PUT /api/admin/products/{id}", middleware.RequireAdmin(cfg, catH.UpdateProduct))
 	mux.HandleFunc("DELETE /api/admin/products/{id}", middleware.RequireAdmin(cfg, catH.DeleteProduct))
 	mux.HandleFunc("POST /api/admin/cloudinary-signature", middleware.RequireAdmin(cfg, catH.CloudinarySignature))
+	mux.HandleFunc("POST /api/admin/uploads", middleware.RequireAdmin(cfg, catH.UploadImage))
 
 	// Cart & Wishlist
 	mux.HandleFunc("GET /api/cart", middleware.RequireAuth(cfg, ordH.GetCart))
@@ -59,7 +59,8 @@ func NewRouter(
 	mux.HandleFunc("DELETE /api/wishlist/{productId}", middleware.RequireAuth(cfg, ordH.RemoveWishlist))
 
 	// Orders
-	mux.HandleFunc("POST /api/orders", middleware.RequireAuth(cfg, ordH.CreateOrder))
+	// Guest checkout: no account needed, so the session is optional.
+	mux.HandleFunc("POST /api/orders", middleware.RateLimit(rl, 20, time.Minute, middleware.AttachOptionalAuth(cfg, ordH.CreateOrder)))
 	mux.HandleFunc("GET /api/orders/my-orders", middleware.RequireAuth(cfg, ordH.MyOrders))
 	mux.HandleFunc("GET /api/admin/orders", middleware.RequireAdmin(cfg, ordH.AdminListOrders))
 	mux.HandleFunc("PUT /api/admin/orders/{id}/status", middleware.RequireAdmin(cfg, ordH.AdminUpdateOrderStatus))

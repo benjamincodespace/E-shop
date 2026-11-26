@@ -208,6 +208,7 @@ func (s *StoreDB) SeedIfEmpty(ctx context.Context) error {
 			Slug:           slug,
 			Description:    desc,
 			Price:          price,
+			Currency:       models.DefaultCurrency,
 			DiscountPrice:  disc,
 			CategoryID:     c.ID,
 			CategoryName:   c.Name,
@@ -367,15 +368,17 @@ func (s *StoreDB) SeedIfEmpty(ctx context.Context) error {
 		unit := services.GetEffectivePrice(p.Price, p.DiscountPrice)
 		sub := services.Round2(unit * float64(os.qty))
 		ship, total := services.CalculateShippingAndTotal(sub)
+		customerID := c.ID
 		orderDocs = append(orderDocs, models.Order{
 			ID:            bson.NewObjectID(),
 			OrderNumber:   os.num,
-			UserID:        c.ID,
+			UserID:        &customerID,
 			CustomerName:  c.Name,
 			CustomerEmail: c.Email,
 			Phone:         c.Phone,
 			Address:       c.Address,
 			Notes:         "Leave package at front concierge.",
+			Currency:      models.DefaultCurrency,
 			Subtotal:      sub,
 			ShippingFee:   ship,
 			Total:         total,

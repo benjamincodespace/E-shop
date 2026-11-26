@@ -3,8 +3,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   ArrowLeft,
-  Check,
-  Edit3,
   Heart,
   Minus,
   Plus,
@@ -13,7 +11,6 @@ import {
   ShoppingCart,
   Star,
   ThumbsUp,
-  Trash2,
 } from 'lucide-react';
 import type { Product, Review, TeeSize } from '@/types/store';
 import { api } from '@/services/api';
@@ -40,8 +37,7 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
   initialReviews = [],
   initialRatingSummary = { average: 0, total: 0, breakdown: [] },
 }) => {
-  const { addToCart, toggleWishlist, wishlistIds, navigate, user, purchasedProductIds, notify, refreshCatalog } =
-    useStore();
+  const { addToCart, toggleWishlist, wishlistIds, navigate, notify } = useStore();
 
   const [product, setProduct] = useState<Product | null>(initialProduct);
   const [reviews, setReviews] = useState<Review[]>(initialReviews);
@@ -56,14 +52,6 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
   const [selectedColor, setSelectedColor] = useState<string>(initialProduct?.colors[0]?.name || 'Black');
   const [quantity, setQuantity] = useState(1);
   const [activeTab, setActiveTab] = useState<'description' | 'reviews' | 'shipping'>('reviews');
-
-  // Review composer & editing
-  const [ratingInput, setRatingInput] = useState(5);
-  const [commentInput, setCommentInput] = useState('');
-  const [submittingReview, setSubmittingReview] = useState(false);
-  const [editingReviewId, setEditingReviewId] = useState<string | null>(null);
-  const [editRating, setEditRating] = useState(5);
-  const [editComment, setEditComment] = useState('');
 
   const loadProduct = useCallback(async (background = false) => {
     if (!background) setLoading(true);
@@ -128,72 +116,12 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
   const isFav = wishlistIds.includes(product.id);
   const stockInfo = getStockBadgeInfo(product.stock);
   const outOfStock = product.stock <= 0;
-  const hasPurchased = Boolean(user && purchasedProductIds.includes(product.id));
-  const alreadyReviewed = Boolean(user && reviews.some((r) => r.userId === user.id));
-
   const handleShare = async () => {
     try {
       await navigator.clipboard.writeText(window.location.href);
       notify('Product link copied to clipboard', 'success');
     } catch {
       notify('Share link ready in browser address bar', 'info');
-    }
-  };
-
-  const handleReviewSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!user) {
-      navigate({ page: 'auth' });
-      return;
-    }
-    setSubmittingReview(true);
-    try {
-      await api.submitReview(product.id, { rating: ratingInput, comment: commentInput.trim() });
-      setCommentInput('');
-      notify('Thank you! Your verified review has been published.', 'success');
-      await Promise.all([loadProduct(true), refreshCatalog()]);
-    } catch (err) {
-      notify(err instanceof Error ? err.message : 'Unable to submit review.', 'error');
-    } finally {
-      setSubmittingReview(false);
-    }
-  };
-
-  const handleSaveEdit = async (reviewId: string) => {
-    try {
-      await api.updateReview(reviewId, { rating: editRating, comment: editComment.trim() });
-      setEditingReviewId(null);
-      notify('Review updated', 'success');
-      await Promise.all([loadProduct(true), refreshCatalog()]);
-    } catch (err) {
-      notify(err instanceof Error ? err.message : 'Could not update review.', 'error');
-    }
-  };
-
-  const handleDeleteReview = async (reviewId: string) => {
-    try {
-      await api.deleteReview(reviewId);
-      notify('Review deleted', 'info');
-      await Promise.all([loadProduct(true), refreshCatalog()]);
-    } catch (err) {
-      notify(err instanceof Error ? err.message : 'Could not delete review.', 'error');
-    }
-  };
-
-  const handleLikeReview = async (reviewId: string) => {
-    if (!user) {
-      notify('Sign in to mark reviews as helpful.', 'info');
-      return;
-    }
-    try {
-      const res = await api.toggleReviewLike(reviewId);
-      setReviews((prev) =>
-        prev.map((r) =>
-          r.id === reviewId ? { ...r, userHasLiked: res.liked, helpfulCount: res.helpfulCount } : r,
-        ),
-      );
-    } catch (err) {
-      notify(err instanceof Error ? err.message : 'Failed to update vote.', 'error');
     }
   };
 
@@ -520,72 +448,14 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
               </div>
             </div>
 
-            {/* Reviews List & Form */}
+            {/* Reviews List */}
             <div className="lg:col-span-8 space-y-6">
               <div className="bg-white border border-neutral-200 rounded-2xl p-5">
-                <h3 className="font-display text-sm font-bold text-neutral-950">Write a Customer Review</h3>
-                {!user ? (
-                  <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
-                    <p className="text-xs text-neutral-500">
-                      Sign in with an account that purchased this T-shirt to leave a verified review.
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => navigate({ page: 'auth' })}
-                      className="px-4 py-2 rounded-full bg-neutral-950 text-white text-xs font-semibold cursor-pointer"
-                    >
-                      Sign In
-                    </button>
-                  </div>
-                ) : !hasPurchased ? (
-                  <p className="mt-2 text-xs text-neutral-500">
-                    Verified buyer protection: only customers who have ordered <strong>{product.name}</strong>{' '}
-                    can submit a rating and review.
-                  </p>
-                ) : alreadyReviewed ? (
-                  <p className="mt-2 text-xs text-neutral-600 inline-flex items-center gap-1.5">
-                    <Check className="w-4 h-4 text-neutral-950" />
-                    You have reviewed this product. You can edit or delete your review below.
-                  </p>
-                ) : (
-                  <form onSubmit={handleReviewSubmit} className="mt-3 space-y-3">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-medium text-neutral-700">Your Rating:</span>
-                      <div className="flex items-center gap-1">
-                        {[1, 2, 3, 4, 5].map((s) => (
-                          <button
-                            key={s}
-                            type="button"
-                            onClick={() => setRatingInput(s)}
-                            aria-label={`Rate ${s} stars`}
-                            className="p-0.5 cursor-pointer"
-                          >
-                            <Star
-                              className={`w-5 h-5 ${
-                                s <= ratingInput ? 'fill-neutral-950 text-neutral-950' : 'text-neutral-300'
-                              }`}
-                            />
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    <textarea
-                      rows={3}
-                      required
-                      value={commentInput}
-                      onChange={(e) => setCommentInput(e.target.value)}
-                      placeholder="Share details on fabric weight, fit, and comfort..."
-                      className="w-full rounded-xl border border-neutral-200 px-3.5 py-2.5 text-sm focus:outline-none focus:border-neutral-950"
-                    />
-                    <button
-                      type="submit"
-                      disabled={submittingReview}
-                      className="px-5 py-2.5 rounded-full bg-neutral-950 text-white text-xs font-semibold hover:bg-neutral-800 cursor-pointer disabled:opacity-50"
-                    >
-                      {submittingReview ? 'Publishing...' : 'Publish Verified Review'}
-                    </button>
-                  </form>
-                )}
+                <h3 className="font-display text-sm font-bold text-neutral-950">Verified Buyer Reviews</h3>
+                <p className="mt-2 text-xs text-neutral-500">
+                  These reviews come from customers whose orders included <strong>{product.name}</strong>. Checkout is
+                  guest-only, so new reviews are not being collected at the moment.
+                </p>
               </div>
 
               {reviews.length === 0 ? (
@@ -596,9 +466,6 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
               ) : (
                 <div className="space-y-4">
                   {reviews.map((rev) => {
-                    const isOwner = user?.id === rev.userId;
-                    const isEditing = editingReviewId === rev.id;
-
                     return (
                       <article
                         key={rev.id}
@@ -637,91 +504,13 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                           </span>
                         </div>
 
-                        {isEditing ? (
-                          <div className="mt-3 space-y-2.5">
-                            <div className="flex items-center gap-1">
-                              {[1, 2, 3, 4, 5].map((s) => (
-                                <button
-                                  key={s}
-                                  type="button"
-                                  onClick={() => setEditRating(s)}
-                                  className="p-0.5 cursor-pointer"
-                                >
-                                  <Star
-                                    className={`w-4 h-4 ${
-                                      s <= editRating ? 'fill-neutral-950 text-neutral-950' : 'text-neutral-300'
-                                    }`}
-                                  />
-                                </button>
-                              ))}
-                            </div>
-                            <textarea
-                              rows={2}
-                              value={editComment}
-                              onChange={(e) => setEditComment(e.target.value)}
-                              className="w-full rounded-xl border border-neutral-200 px-3 py-2 text-sm focus:outline-none focus:border-neutral-950"
-                            />
-                            <div className="flex items-center gap-2">
-                              <button
-                                type="button"
-                                onClick={() => handleSaveEdit(rev.id)}
-                                className="px-4 py-1.5 rounded-full bg-neutral-950 text-white text-xs font-semibold cursor-pointer"
-                              >
-                                Save
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setEditingReviewId(null)}
-                                className="px-4 py-1.5 rounded-full border border-neutral-200 text-xs font-medium cursor-pointer"
-                              >
-                                Cancel
-                              </button>
-                            </div>
-                          </div>
-                        ) : (
-                          <p className="mt-3 text-sm text-neutral-700 leading-relaxed">{rev.comment}</p>
-                        )}
+                        <p className="mt-3 text-sm text-neutral-700 leading-relaxed">{rev.comment}</p>
 
                         <div className="mt-4 flex items-center justify-between pt-3 border-t border-neutral-100">
-                          <button
-                            type="button"
-                            onClick={() => handleLikeReview(rev.id)}
-                            className={`inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1 rounded-full border transition-colors cursor-pointer ${
-                              rev.userHasLiked
-                                ? 'bg-neutral-950 text-white border-neutral-950'
-                                : 'bg-white text-neutral-600 border-neutral-200 hover:border-neutral-400'
-                            }`}
-                          >
+                          <span className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1 rounded-full border bg-white text-neutral-600 border-neutral-200">
                             <ThumbsUp className="w-3.5 h-3.5" />
                             <span>Helpful ({rev.helpfulCount})</span>
-                          </button>
-
-                          {isOwner && !isEditing && (
-                            <div className="flex items-center gap-2">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setEditingReviewId(rev.id);
-                                  setEditRating(rev.rating);
-                                  setEditComment(rev.comment);
-                                }}
-                                aria-label="Edit review"
-                                className="inline-flex items-center gap-1 text-xs text-neutral-600 hover:text-neutral-950 cursor-pointer"
-                              >
-                                <Edit3 className="w-3.5 h-3.5" />
-                                <span>Edit</span>
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleDeleteReview(rev.id)}
-                                aria-label="Delete review"
-                                className="inline-flex items-center gap-1 text-xs text-neutral-500 hover:text-neutral-950 cursor-pointer"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                                <span>Delete</span>
-                              </button>
-                            </div>
-                          )}
+                          </span>
                         </div>
                       </article>
                     );

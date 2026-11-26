@@ -172,13 +172,20 @@ func (h *OrderHandler) RemoveWishlist(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *OrderHandler) CreateOrder(w http.ResponseWriter, r *http.Request) {
+	// Guest checkout: a valid session is optional, and the delivery details in
+	// the request are all that is required to place the order.
 	claims := middleware.GetUserClaims(r.Context())
+	userID, customerEmail := "", ""
+	if claims != nil {
+		userID, customerEmail = claims.Sub, claims.Email
+	}
 	var body struct {
 		CustomerName  string                           `json:"customerName"`
 		Phone         string                           `json:"phone"`
 		Address       string                           `json:"address"`
 		Notes         string                           `json:"notes"`
 		PaymentMethod string                           `json:"paymentMethod"`
+		Currency      string                           `json:"currency"`
 		Items         []repositories.CheckoutLineInput `json:"items"`
 	}
 	if err := DecodeJSON(r, &body); err != nil {
@@ -212,13 +219,14 @@ func (h *OrderHandler) CreateOrder(w http.ResponseWriter, r *http.Request) {
 	}
 
 	order, err := h.orderRepo.PlaceOrderAtomic(r.Context(), repositories.CheckoutInput{
-		UserID:        claims.Sub,
-		CustomerEmail: claims.Email,
+		UserID:        userID,
+		CustomerEmail: customerEmail,
 		CustomerName:  name,
 		Phone:         phone,
 		Address:       addr,
 		Notes:         strings.TrimSpace(body.Notes),
 		PaymentMethod: pm,
+		Currency:      body.Currency,
 		Items:         body.Items,
 	})
 	if err != nil {
