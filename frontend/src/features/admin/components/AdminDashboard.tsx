@@ -974,11 +974,11 @@ export const AdminDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }
                 <span className="truncate">{user.name}</span>
                 {user.verified && (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={VERIFIED_BADGE} alt="Verified seller" className="w-3.5 h-3.5 shrink-0" />
+                  <img src={VERIFIED_BADGE} alt="Verified seller" className="w-6 h-6 shrink-0" />
                 )}
                 {!user.verified && user.role === 'admin' && !user.approvalStatus && (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={VERIFIED_BADGE} alt="Verified seller" className="w-3.5 h-3.5 shrink-0" />
+                  <img src={VERIFIED_BADGE} alt="Verified seller" className="w-6 h-6 shrink-0" />
                 )}
               </p>
               <p className="text-[10px] text-neutral-400 truncate">

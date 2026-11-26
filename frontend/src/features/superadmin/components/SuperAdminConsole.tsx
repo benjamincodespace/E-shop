@@ -873,7 +873,7 @@ export const SuperAdminConsole: React.FC = () => {
                               <p className="text-sm font-semibold text-neutral-950 truncate">{u.name}</p>
                               {u.role === 'admin' && sellerApproval(u) === 'approved' && (
                                 // eslint-disable-next-line @next/next/no-img-element
-                                <img src={VERIFIED_BADGE} alt="Verified seller" className="w-3.5 h-3.5 shrink-0" />
+                                <img src={VERIFIED_BADGE} alt="Verified seller" className="w-5 h-5 shrink-0" />
                               )}
                               {isSelf && (
                                 <span className="text-[10px] font-semibold text-neutral-500">(you)</span>

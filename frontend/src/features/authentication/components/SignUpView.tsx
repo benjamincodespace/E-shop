@@ -126,7 +126,7 @@ export const SignUpView: React.FC = () => {
               <img
                 src={VERIFIED_BADGE}
                 alt="Verified seller"
-                className="absolute -bottom-1.5 -right-1.5 w-5 h-5 drop-shadow"
+                className="absolute -bottom-2 -right-2 w-8 h-8 drop-shadow"
               />
             )}
           </div>
