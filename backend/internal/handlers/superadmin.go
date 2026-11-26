@@ -57,7 +57,7 @@ func (h *SuperAdminHandler) Overview(w http.ResponseWriter, r *http.Request) {
 
 func (h *SuperAdminHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
 	search := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("search")))
-	users, err := h.userRepo.ListAllUsers(r.Context())
+	users, err := h.userRepo.ListAllUsersWithStats(r.Context())
 	if err != nil {
 		WriteError(w, http.StatusInternalServerError, "Failed to load users.")
 		return
@@ -66,7 +66,7 @@ func (h *SuperAdminHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
 		WriteJSON(w, http.StatusOK, map[string]interface{}{"users": users})
 		return
 	}
-	filtered := make([]models.User, 0, len(users))
+	filtered := make([]models.UserAdminSummary, 0, len(users))
 	for _, u := range users {
 		hay := strings.ToLower(u.Name + " " + u.Email + " " + u.Phone + " " + string(u.Role))
 		if strings.Contains(hay, search) {

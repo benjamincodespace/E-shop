@@ -23,8 +23,8 @@ import {
   Users,
 } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
-import { api } from '@/services/api';
-import type { AnalyticsData, Product, User, UserRole } from '@/types/store';
+import { api, type SuperUser } from '@/services/api';
+import type { AnalyticsData, DeliveryAddress, Product, User, UserRole } from '@/types/store';
 import { BrandLogo } from '@/components/BrandLogo';
 import { SafeImage } from '@/components/SafeImage';
 import { formatCurrency } from '@/utils/currency';
@@ -50,6 +50,14 @@ const ROLE_LABEL: Record<UserRole, string> = {
 const VERIFIED_BADGE = '/images/badges/verified-seller.svg';
 
 /** Legacy sellers have no stored approval status and count as approved. */
+function addressLine(address: DeliveryAddress | null | undefined): string {
+  if (!address) return '';
+  return [address.street, address.building, address.district, address.city, address.country]
+    .map((part) => (part || '').trim())
+    .filter(Boolean)
+    .join(', ');
+}
+
 function sellerApproval(account: User): 'pending' | 'approved' | 'rejected' {
   if (account.approvalStatus === 'pending' || account.approvalStatus === 'rejected') return account.approvalStatus;
   return 'approved';
@@ -95,10 +103,13 @@ export const SuperAdminConsole: React.FC = () => {
 
   // Data
   const [overview, setOverview] = useState<Overview | null>(null);
-  const [users, setUsers] = useState<User[]>([]);
+  const [users, setUsers] = useState<SuperUser[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [userSearch, setUserSearch] = useState('');
-  const [approvalFilter, setApprovalFilter] = useState<'all' | 'pending' | 'approved'>('all');
+  const [userFilter, setUserFilter] = useState<
+    'all' | 'buyer' | 'seller' | 'pending' | 'super' | 'disabled'
+  >('all');
+  const [expandedUserId, setExpandedUserId] = useState('');
   const [productSearch, setProductSearch] = useState('');
   const [loading, setLoading] = useState(false);
   const [busyId, setBusyId] = useState('');
@@ -192,7 +203,7 @@ export const SuperAdminConsole: React.FC = () => {
     setBusyId(target.id);
     try {
       const res = await api.updateUserRole(target.id, role);
-      setUsers((prev) => prev.map((u) => (u.id === target.id ? res.user : u)));
+      setUsers((prev) => prev.map((u) => (u.id === target.id ? { ...u, ...res.user } : u)));
       notify(`${res.user.name} is now ${ROLE_LABEL[res.user.role]}.`, 'success');
     } catch (err) {
       notify(err instanceof Error ? err.message : 'Could not change the role.', 'error');
@@ -205,7 +216,7 @@ export const SuperAdminConsole: React.FC = () => {
     setBusyId(target.id);
     try {
       const res = await api.approveSeller(target.id);
-      setUsers((prev) => prev.map((u) => (u.id === target.id ? res.user : u)));
+      setUsers((prev) => prev.map((u) => (u.id === target.id ? { ...u, ...res.user } : u)));
       setOverview((prev) =>
         prev ? { ...prev, pendingSellers: Math.max(0, prev.pendingSellers - 1) } : prev,
       );
@@ -221,7 +232,7 @@ export const SuperAdminConsole: React.FC = () => {
     setBusyId(target.id);
     try {
       const res = await api.rejectSeller(target.id);
-      setUsers((prev) => prev.map((u) => (u.id === target.id ? res.user : u)));
+      setUsers((prev) => prev.map((u) => (u.id === target.id ? { ...u, ...res.user } : u)));
       setOverview((prev) =>
         prev && sellerApproval(target) === 'pending'
           ? { ...prev, pendingSellers: Math.max(0, prev.pendingSellers - 1) }
@@ -239,7 +250,7 @@ export const SuperAdminConsole: React.FC = () => {
     setBusyId(target.id);
     try {
       const res = await api.toggleUserDisabled(target.id);
-      setUsers((prev) => prev.map((u) => (u.id === target.id ? res.user : u)));
+      setUsers((prev) => prev.map((u) => (u.id === target.id ? { ...u, ...res.user } : u)));
       notify(res.user.disabled ? `${res.user.name} disabled.` : `${res.user.name} reactivated.`, 'info');
     } catch (err) {
       notify(err instanceof Error ? err.message : 'Could not update the account.', 'error');
@@ -545,9 +556,11 @@ export const SuperAdminConsole: React.FC = () => {
   }
 
   const filteredUsers = users.filter((u) => {
-    if (approvalFilter !== 'all') {
-      if (u.role !== 'admin' || sellerApproval(u) !== approvalFilter) return false;
-    }
+    if (userFilter === 'buyer' && u.role !== 'customer') return false;
+    if (userFilter === 'seller' && u.role !== 'admin') return false;
+    if (userFilter === 'pending' && !(u.role === 'admin' && sellerApproval(u) === 'pending')) return false;
+    if (userFilter === 'super' && u.role !== 'super_admin') return false;
+    if (userFilter === 'disabled' && !u.disabled) return false;
     if (!userSearch.trim()) return true;
     const q = userSearch.toLowerCase();
     return (
@@ -557,6 +570,15 @@ export const SuperAdminConsole: React.FC = () => {
       ROLE_LABEL[u.role].toLowerCase().includes(q)
     );
   });
+
+  const userFilterCounts: Record<typeof userFilter, number> = {
+    all: users.length,
+    buyer: users.filter((u) => u.role === 'customer').length,
+    seller: users.filter((u) => u.role === 'admin').length,
+    pending: users.filter((u) => u.role === 'admin' && sellerApproval(u) === 'pending').length,
+    super: users.filter((u) => u.role === 'super_admin').length,
+    disabled: users.filter((u) => u.disabled).length,
+  };
 
   const superAdminCount = overview?.totalSuperAdmins ?? users.filter((u) => u.role === 'super_admin').length;
   const superAdminLimit = overview?.superAdminLimit ?? 4;
@@ -716,7 +738,7 @@ export const SuperAdminConsole: React.FC = () => {
                     type="button"
                     onClick={() => {
                       setTab('users');
-                      setApprovalFilter('pending');
+                      setUserFilter('pending');
                     }}
                     className="px-3.5 py-1.5 rounded-full bg-neutral-950 text-white text-[11px] font-semibold cursor-pointer"
                   >
@@ -808,25 +830,28 @@ export const SuperAdminConsole: React.FC = () => {
                   <p className="text-[11px] text-neutral-500">
                     Approve sellers, change roles, disable or delete any account.
                   </p>
-                  <div className="mt-2 flex items-center gap-1.5">
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
                     {(
                       [
                         { id: 'all', label: 'All' },
-                        { id: 'pending', label: `Pending (${overview?.pendingSellers ?? 0})` },
-                        { id: 'approved', label: 'Verified sellers' },
+                        { id: 'buyer', label: 'Buyers' },
+                        { id: 'seller', label: 'Sellers' },
+                        { id: 'pending', label: 'Pending' },
+                        { id: 'super', label: 'Super admins' },
+                        { id: 'disabled', label: 'Disabled' },
                       ] as const
                     ).map((f) => (
                       <button
                         key={f.id}
                         type="button"
-                        onClick={() => setApprovalFilter(f.id)}
+                        onClick={() => setUserFilter(f.id)}
                         className={`px-3 py-1 rounded-full text-[11px] font-semibold cursor-pointer ${
-                          approvalFilter === f.id
+                          userFilter === f.id
                             ? 'bg-neutral-950 text-white'
                             : 'bg-white border border-neutral-200 text-neutral-700'
                         }`}
                       >
-                        {f.label}
+                        {f.label} ({userFilterCounts[f.id]})
                       </button>
                     ))}
                   </div>
@@ -858,8 +883,9 @@ export const SuperAdminConsole: React.FC = () => {
                     return (
                       <div
                         key={u.id}
-                        className="bg-white border border-neutral-200/80 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center gap-4"
+                        className="bg-white border border-neutral-200/80 rounded-2xl p-4"
                       >
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-4">
                         <div className="flex items-center gap-3 min-w-0 flex-1">
                           <div className="w-11 h-11 rounded-full bg-neutral-100 overflow-hidden shrink-0 flex items-center justify-center text-xs font-bold text-neutral-700">
                             {u.avatarUrl ? (
@@ -887,6 +913,11 @@ export const SuperAdminConsole: React.FC = () => {
                             <p className="text-[11px] text-neutral-500 truncate">
                               {u.email || u.phone || 'No contact'} · Joined {formatDate(u.createdAt)}
                             </p>
+                            <p className="text-[11px] font-medium text-neutral-600 truncate">
+                              {u.role === 'admin'
+                                ? `${u.productCount} listing${u.productCount === 1 ? '' : 's'}`
+                                : `${u.orderCount} order${u.orderCount === 1 ? '' : 's'} · $${u.totalSpent.toFixed(2)} spent`}
+                            </p>
                             <span
                               className={`mt-1 inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold ${ROLE_STYLE[u.role]}`}
                             >
@@ -913,6 +944,13 @@ export const SuperAdminConsole: React.FC = () => {
                         </div>
 
                         <div className="flex items-center gap-2 flex-wrap">
+                          <button
+                            type="button"
+                            onClick={() => setExpandedUserId(expandedUserId === u.id ? '' : u.id)}
+                            className="px-3 py-2 rounded-full border border-neutral-200 text-[11px] font-semibold text-neutral-700 hover:border-neutral-950 cursor-pointer"
+                          >
+                            {expandedUserId === u.id ? 'Hide details' : 'Details'}
+                          </button>
                           {u.role === 'admin' && sellerApproval(u) === 'pending' && (
                             <>
                               <button
@@ -975,6 +1013,31 @@ export const SuperAdminConsole: React.FC = () => {
                             {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
                           </button>
                         </div>
+                        </div>
+                        {expandedUserId === u.id && (
+                          <div className="mt-3 pt-3 border-t border-neutral-100 grid sm:grid-cols-2 gap-2 text-[11px] text-neutral-600">
+                            <p className="truncate">
+                              <span className="font-semibold text-neutral-900">Email:</span> {u.email || '—'}
+                            </p>
+                            <p className="truncate">
+                              <span className="font-semibold text-neutral-900">Telephone:</span> {u.phone || '—'}
+                            </p>
+                            <p className="sm:col-span-2">
+                              <span className="font-semibold text-neutral-900">Location:</span>{' '}
+                              {addressLine(u.deliveryAddress) || 'No location saved'}
+                            </p>
+                            <p>
+                              <span className="font-semibold text-neutral-900">Activity:</span>{' '}
+                              {u.role === 'admin'
+                                ? `${u.productCount} listing${u.productCount === 1 ? '' : 's'}`
+                                : `${u.orderCount} order${u.orderCount === 1 ? '' : 's'} · $${u.totalSpent.toFixed(2)} spent`}
+                            </p>
+                            <p>
+                              <span className="font-semibold text-neutral-900">Account:</span>{' '}
+                              {u.disabled ? 'Disabled' : 'Active'}
+                            </p>
+                          </div>
+                        )}
                       </div>
                     );
                   })}

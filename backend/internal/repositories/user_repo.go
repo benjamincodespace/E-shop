@@ -253,6 +253,74 @@ func (r *UserRepository) ListAllUsers(ctx context.Context) ([]models.User, error
 	return users, nil
 }
 
+// ListAllUsersWithStats returns every account together with the buyer order
+// totals and seller catalogue size, so the super administrator can oversee
+// buyers and sellers from one screen.
+func (r *UserRepository) ListAllUsersWithStats(ctx context.Context) ([]models.UserAdminSummary, error) {
+	users, err := r.ListAllUsers(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	type orderRow struct {
+		UserID   *bson.ObjectID     `bson:"userId"`
+		Total    float64            `bson:"total"`
+		Currency string             `bson:"currency"`
+		Status   models.OrderStatus `bson:"status"`
+	}
+	oCur, err := r.store.DB.Collection("orders").Find(ctx, bson.M{})
+	if err != nil {
+		return nil, err
+	}
+	var orders []orderRow
+	if err := oCur.All(ctx, &orders); err != nil {
+		oCur.Close(ctx)
+		return nil, err
+	}
+	oCur.Close(ctx)
+
+	orderCount := make(map[string]int)
+	spent := make(map[string]float64)
+	for _, o := range orders {
+		if o.UserID == nil || o.Status == models.OrderCancelled {
+			continue
+		}
+		id := o.UserID.Hex()
+		orderCount[id]++
+		spent[id] += services.ConvertCurrency(o.Total, o.Currency, models.DefaultCurrency)
+	}
+
+	type productRow struct {
+		SellerID string `bson:"sellerId"`
+	}
+	pCur, err := r.store.DB.Collection("products").Find(ctx, bson.M{"sellerId": bson.M{"$exists": true, "$ne": ""}})
+	if err != nil {
+		return nil, err
+	}
+	var products []productRow
+	if err := pCur.All(ctx, &products); err != nil {
+		pCur.Close(ctx)
+		return nil, err
+	}
+	pCur.Close(ctx)
+
+	productCount := make(map[string]int)
+	for _, p := range products {
+		productCount[p.SellerID]++
+	}
+
+	out := make([]models.UserAdminSummary, 0, len(users))
+	for _, u := range users {
+		out = append(out, models.UserAdminSummary{
+			User:         u,
+			OrderCount:   orderCount[u.IDHex],
+			TotalSpent:   services.Round2(spent[u.IDHex]),
+			ProductCount: productCount[u.IDHex],
+		})
+	}
+	return out, nil
+}
+
 func (r *UserRepository) SetAvatar(ctx context.Context, idHex, avatarURL string) (*models.User, error) {
 	oid, err := bson.ObjectIDFromHex(idHex)
 	if err != nil {

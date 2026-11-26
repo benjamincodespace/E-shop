@@ -146,6 +146,15 @@ type CustomerSummary struct {
 	TotalSpent float64 `json:"totalSpent"`
 }
 
+// UserAdminSummary is the platform-owner view of any account: buyers gain
+// order history, sellers gain their catalogue size.
+type UserAdminSummary struct {
+	User
+	OrderCount   int     `json:"orderCount"`
+	TotalSpent   float64 `json:"totalSpent"`
+	ProductCount int     `json:"productCount"`
+}
+
 type Category struct {
 	ID           bson.ObjectID `bson:"_id,omitempty" json:"-"`
 	IDHex        string        `bson:"-" json:"id"`

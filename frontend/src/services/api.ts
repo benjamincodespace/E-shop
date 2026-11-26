@@ -18,6 +18,9 @@ import { prepareImageForUpload, uploadToCloudinary } from '@/lib/imageUpload';
 
 const API_BASE = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080').replace(/\/+$/, '');
 
+/** Every account with the buyer/seller activity the super admin oversees. */
+export type SuperUser = User & { orderCount: number; totalSpent: number; productCount: number };
+
 let inMemoryToken: string | null = null;
 let refreshPromise: Promise<string | null> | null = null;
 
@@ -423,7 +426,7 @@ export const api = {
       analytics: AnalyticsData;
     }>('/api/superadmin/overview'),
   getSuperUsers: (search?: string) =>
-    apiRequest<{ users: User[] }>(
+    apiRequest<{ users: SuperUser[] }>(
       `/api/superadmin/users${search ? `?search=${encodeURIComponent(search)}` : ''}`,
     ),
   updateUserRole: (userId: string, role: User['role']) =>
