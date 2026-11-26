@@ -110,6 +110,17 @@ export const Footer: React.FC = () => {
       <div className="border-t border-neutral-100 py-4 text-center text-[11px] text-neutral-400">
         © {new Date().getFullYear()} E-shop All. All rights reserved.
       </div>
+
+      <div className="border-t border-neutral-100 py-3 text-center">
+        <a
+          href="https://blobewebsite.blobeinc.workers.dev/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1.5 text-[11px] font-medium text-neutral-500 hover:text-neutral-950 transition-colors"
+        >
+          Powered by Blobe Inc
+        </a>
+      </div>
     </footer>
   );
 };
