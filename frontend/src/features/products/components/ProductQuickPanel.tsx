@@ -89,9 +89,7 @@ export const ProductQuickPanel: React.FC<ProductQuickPanelProps> = ({ product })
                 <Star
                   key={s}
                   className={`w-3 h-3 ${
-                    s <= Math.round(product.ratingAvg || 5)
-                      ? 'fill-neutral-950 text-neutral-950'
-                      : 'text-neutral-300'
+                    s <= Math.round(product.ratingAvg || 5) ? 'star-gold' : 'text-neutral-300'
                   }`}
                 />
               ))}
@@ -239,7 +237,7 @@ export const ProductQuickPanel: React.FC<ProductQuickPanelProps> = ({ product })
                           <Star
                             key={s}
                             className={`w-2.5 h-2.5 ${
-                              s <= rev.rating ? 'fill-neutral-950 text-neutral-950' : 'text-neutral-300'
+                              s <= rev.rating ? 'star-gold' : 'text-neutral-300'
                             }`}
                           />
                         ))}

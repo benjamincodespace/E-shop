@@ -64,6 +64,12 @@ const en = {
   'settings.dark': 'Dark',
   'settings.savedAuto': 'Changes are saved on this device automatically.',
   'settings.close': 'Close',
+  'settings.welcome': 'Welcome to E-shop All',
+  'settings.welcomeTitle': 'Make it yours',
+  'settings.welcomeSubtitle':
+    'Choose your language, appearance and currency. You can change them at any time.',
+  'settings.start': 'Start shopping',
+  'settings.welcomeSaved': 'Your choices are saved on this device.',
 };
 
 export type TranslationKey = keyof typeof en;
@@ -119,6 +125,12 @@ const sw: Dictionary = {
   'settings.dark': 'Giza',
   'settings.savedAuto': 'Mabadiliko huhifadhiwa kwenye kifaa hiki kiotomatiki.',
   'settings.close': 'Funga',
+  'settings.welcome': 'Karibu E-shop All',
+  'settings.welcomeTitle': 'Ifanye yako',
+  'settings.welcomeSubtitle':
+    'Chagua lugha, mwonekano na sarafu yako. Unaweza kubadilisha wakati wowote.',
+  'settings.start': 'Anza kununua',
+  'settings.welcomeSaved': 'Chaguo zako huhifadhiwa kwenye kifaa hiki.',
 };
 
 const fr: Dictionary = {
@@ -170,6 +182,12 @@ const fr: Dictionary = {
   'settings.dark': 'Sombre',
   'settings.savedAuto': 'Les modifications sont enregistrées automatiquement sur cet appareil.',
   'settings.close': 'Fermer',
+  'settings.welcome': 'Bienvenue sur E-shop All',
+  'settings.welcomeTitle': 'Personnalisez votre expérience',
+  'settings.welcomeSubtitle':
+    'Choisissez votre langue, apparence et devise. Modifiable à tout moment.',
+  'settings.start': 'Commencer les achats',
+  'settings.welcomeSaved': 'Vos choix sont enregistrés sur cet appareil.',
 };
 
 const rw: Dictionary = {
@@ -221,6 +239,12 @@ const rw: Dictionary = {
   'settings.dark': 'Umwijima',
   'settings.savedAuto': 'Impinduka zibikwa kuri iyi aparato mu buryo bwikora.',
   'settings.close': 'Funga',
+  'settings.welcome': 'Murakaza neza kuri E-shop All',
+  'settings.welcomeTitle': 'Igenamiterere yawe',
+  'settings.welcomeSubtitle':
+    'Hitamo ururimi, isura n’ifaranga. Ushobora kubihindura igihe icyo ari cyo cyose.',
+  'settings.start': 'Tangira kugura',
+  'settings.welcomeSaved': 'Amahitamo yawe abikwa kuri iyi aparato.',
 };
 
 const DICTIONARIES: Record<LanguageCode, Dictionary> = { en, sw, fr, rw };

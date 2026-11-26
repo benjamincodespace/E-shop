@@ -237,7 +237,7 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                   key={s}
                   className={`w-3.5 h-3.5 ${
                     s <= Math.round(ratingSummary.average || product.ratingAvg || 5)
-                      ? 'fill-neutral-950 text-neutral-950'
+                      ? 'star-gold'
                       : 'text-neutral-300'
                   }`}
                 />

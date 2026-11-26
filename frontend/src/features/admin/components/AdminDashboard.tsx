@@ -909,7 +909,7 @@ export const AdminDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }
                 <div className="bg-white border border-neutral-200/80 rounded-2xl p-4 sm:p-5">
                   <div className="flex items-center justify-between text-neutral-500">
                     <span className="text-xs font-medium">Highest Rated</span>
-                    <Star className="w-4 h-4 fill-neutral-950 text-neutral-950" />
+                    <Star className="w-4 h-4 star-gold" />
                   </div>
                   <p className="mt-2 font-display text-2xl font-bold text-neutral-950 tabular-nums">
                     {analytics?.highestRatedProduct
@@ -1140,7 +1140,7 @@ export const AdminDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }
                                 </span>
                                 <span className="text-neutral-400">·</span>
                                 <span className="inline-flex items-center gap-1 text-neutral-600 tabular-nums">
-                                  <Star className="w-3 h-3 fill-neutral-950 text-neutral-950" />
+                                  <Star className="w-3 h-3 star-gold" />
                                   {p.ratingAvg.toFixed(1)} ({p.reviewCount})
                                 </span>
                               </div>

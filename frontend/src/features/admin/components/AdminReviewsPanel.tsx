@@ -150,7 +150,7 @@ export const AdminReviewsPanel: React.FC<AdminReviewsPanelProps> = ({
                     {[1, 2, 3, 4, 5].map((star) => (
                       <Star
                         key={star}
-                        className={`w-3.5 h-3.5 ${star <= rev.rating ? 'fill-neutral-950 text-neutral-950' : 'text-neutral-300'}`}
+                        className={`w-3.5 h-3.5 ${star <= rev.rating ? 'star-gold' : 'text-neutral-300'}`}
                       />
                     ))}
                     <span className="ml-1 text-[11px] text-neutral-400">

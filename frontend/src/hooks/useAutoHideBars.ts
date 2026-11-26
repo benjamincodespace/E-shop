@@ -65,6 +65,19 @@ function handleScroll(event: Event) {
   const delta = y - last;
   if (Math.abs(delta) < SCROLL_THRESHOLD) return;
 
+  // When a pane is already at its bottom edge, a layout change (the header
+  // hiding and the desktop frame growing by its height) clamps the scroll
+  // position upward. Treating that clamp as a real upward gesture re-shows the
+  // bar, which shrinks the frame again — an endless toggle loop. Only genuine
+  // upward movement away from the bottom should reveal the bar.
+  const scrollHeight = element ? element.scrollHeight : document.documentElement.scrollHeight;
+  const viewportHeight = element ? element.clientHeight : window.innerHeight;
+  const atBottom = y + viewportHeight >= scrollHeight - 1;
+  if (delta < 0 && atBottom) {
+    positions.set(key, y);
+    return;
+  }
+
   positions.set(key, y);
   claimFrame(delta);
 }

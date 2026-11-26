@@ -36,6 +36,75 @@ const FieldError: React.FC<{ id: string; message?: string }> = ({ id, message })
     </p>
   ) : null;
 
+/* Mobile-money brand marks shown beside the payment methods. */
+const AirtelMoneyIcon: React.FC<{ className?: string }> = ({ className }) => (
+  <svg viewBox="0 0 32 32" className={className} aria-hidden="true" focusable="false">
+    <rect width="32" height="32" rx="8" fill="#E40000" />
+    <path
+      d="M8.5 21.5c3.6-1.6 6.4-5 7.5-9.5"
+      fill="none"
+      stroke="#fff"
+      strokeWidth="2.4"
+      strokeLinecap="round"
+    />
+    <path
+      d="M16 12c1.1 4.5 3.9 7.9 7.5 9.5"
+      fill="none"
+      stroke="#fff"
+      strokeWidth="2.4"
+      strokeLinecap="round"
+    />
+    <circle cx="16" cy="23" r="1.5" fill="#fff" />
+  </svg>
+);
+
+const MtnMoneyIcon: React.FC<{ className?: string }> = ({ className }) => (
+  <svg viewBox="0 0 44 44" className={className} aria-hidden="true" focusable="false">
+    <rect width="44" height="44" rx="9" fill="#FFCB05" />
+    <text
+      x="22"
+      y="27.5"
+      textAnchor="middle"
+      fontFamily="Arial, Helvetica, sans-serif"
+      fontSize="12"
+      fontWeight="800"
+      fill="#111111"
+    >
+      MTN
+    </text>
+  </svg>
+);
+
+const VisaIcon: React.FC<{ className?: string }> = ({ className }) => (
+  <svg viewBox="0 0 512 320" className={className} aria-hidden="true" focusable="false">
+    <path d="M288 0c-43 0-78 35-78 78s35 78 78 78 78-35 78-78-35-78-78-78zM288 32c48 0 88 39 88 88s-40 88-88 88-88-39-88-88 40-88 88-88zM288 160c-41.4 0-75.2 33.8-75.2 75.2s33.8 75.2 75.2 75.2 75.2-33.8 75.2-75.2-33.8-75.2-75.2-75.2zm0 88a13.08 13.08 0 0 1-13.08 13.08 13.08 13.08 0 0 1-13.08-13.08 13.08 13.08 0 0 1 13.08-13.08 13.08 13.08 0 0 1 13.08 13.08z" fill="#1A1F71" />
+    <path fill="#F7B600" fillRule="evenodd" d="M512 96v128c0 42-34 76-76 76H256c-33 0-64-27-64-60V96c0-42 34-76 76-76H436c33 0 64 27 64 60v96c0 6-5 11-11 11H267c-6 0-11-5-11-11v-96H152c-16 0-31 11-34 26l34 34c3-1 6-2 9-2h190c16 0 31 11 34 26l-34 34c-6 1-11 5-11 11v12h192c16 0 31 11 34 26l-34 34c-6 1-11 5-11 11h-176c0-19 15-34 34-34h190c3 2 5 3 8 3h190c6 0 11-5 11-11v-96h-33c-6 0-11-5-11-11v-16c0-6 5-11 11-11h47c6 0 11 5 11 11v16H460c6 0 11 5 11 11v96c0 2-2 4-5 4H267c-3 0-5-2-5-5v-96h33c6 0 11 5 11 11v16H460c6 0 11 5 11 11v96c0 6-5 11-11 11H288V96c0-42 34-76 76-76h190c6 0 11 5 11 11v96c0 10-8 18-18 18H256c-10 0-18-8-18-18V96c0-10 8-18 18-18h256zM429 224H256V160h173c6 0 11 5 11 11v6h-9c-6 0-11-5-11-11z" clipRule="evenodd" />
+  </svg>
+);
+
+const PaymentMethodCard: React.FC<{
+  name: string;
+  icon: React.ReactElement;
+  selected: boolean;
+  onClick: () => void;
+}> = ({ name, icon, selected, onClick }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    aria-pressed={selected}
+    className={`flex items-center gap-3 rounded-xl border text-left transition-colors cursor-pointer ${
+      selected
+          ? "border-neutral-950 bg-neutral-950 text-white shadow-[0_6px_14px_rgba(0,0,0,0.16)]"
+          : "border-neutral-200 bg-white text-neutral-800 hover:border-neutral-400"
+    }`}
+  >
+    <span className={`shrink-0 ${selected ? "text-white" : "text-neutral-700"}`}>{icon}</span>
+    <span className={`flex-1 min-w-0 font-semibold text-xs ${selected ? "text-white" : "text-neutral-900"}`}>
+      {name}
+    </span>
+  </button>
+);
+
 export const CheckoutView: React.FC = () => {
   const {
     cart,
@@ -610,24 +679,39 @@ export const CheckoutView: React.FC = () => {
           <div className="pt-2">
             <span className="block text-xs font-semibold text-neutral-800 mb-2">Payment Method</span>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-              {['Cash on Delivery', 'Pay on Pickup'].map((method) => (
-                <button
-                  key={method}
-                  type="button"
-                  onClick={() => setPaymentMethod(method)}
-                  aria-pressed={paymentMethod === method}
-                  className={`px-4 py-3 rounded-xl border text-xs font-semibold text-left transition-colors cursor-pointer ${
-                    paymentMethod === method
-                      ? 'border-neutral-950 bg-neutral-950 text-white'
-                      : 'border-neutral-200 bg-white text-neutral-800 hover:border-neutral-400'
-                  }`}
-                >
-                  {method}
-                </button>
-              ))}
+              <PaymentMethodCard
+                name="Cash on Delivery"
+                icon={<ShieldCheck className="w-5 h-5" />}
+                selected={paymentMethod === 'Cash on Delivery'}
+                onClick={() => setPaymentMethod('Cash on Delivery')}
+              />
+              <PaymentMethodCard
+                name="Pay on Pickup"
+                icon={<CheckCircle2 className="w-5 h-5" />}
+                selected={paymentMethod === 'Pay on Pickup'}
+                onClick={() => setPaymentMethod('Pay on Pickup')}
+              />
+              <PaymentMethodCard
+                name="Airtel Money"
+                icon={<AirtelMoneyIcon className="h-6 w-6" />}
+                selected={paymentMethod === 'Airtel Money'}
+                onClick={() => setPaymentMethod('Airtel Money')}
+              />
+              <PaymentMethodCard
+                name="MTN Money"
+                icon={<MtnMoneyIcon className="h-6 w-6" />}
+                selected={paymentMethod === 'MTN Money'}
+                onClick={() => setPaymentMethod('MTN Money')}
+              />
+              <PaymentMethodCard
+                name="VISA"
+                icon={<VisaIcon className="h-6 w-6" />}
+                selected={paymentMethod === 'VISA'}
+                onClick={() => setPaymentMethod('VISA')}
+              />
             </div>
             <p className="mt-2 text-[11px] text-neutral-500">
-              Modular payment architecture ready for Stripe or regional gateway integration.
+              Select a payment method. Mobile money and card options are shown for reference; order confirmation uses the method you pick here.
             </p>
           </div>
         </div>

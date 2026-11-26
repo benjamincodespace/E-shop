@@ -5,12 +5,15 @@
     --font-display: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
     --font-sans: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
     --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+    /* Brand tokens. Light mode ink is the navy used on buttons and icons. */
+    --ink: #0b1220;
+    --gold: #fbbf24;
   }
 
   body {
     font-family: var(--font-sans);
     background-color: #ffffff;
-    color: #0a0a0b;
+    color: var(--ink);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
@@ -107,23 +110,68 @@
   }
 }
 
-/* Dark theme: the UI is built from monochrome utility classes, so a small
-   override layer recolours the palette without duplicating every component. */
+/* Rating stars are always premium gold, in both themes. */
+.star-gold {
+  color: var(--gold);
+  fill: var(--gold);
+}
+
+/* --------------------------------------------------------------------------
+   Dark theme tokens and page base
+   Kept unlayered so they win over the body's utility classes.
+   Palette: primary #F8FAFC, icons #E2E8F0, secondary #CBD5E1,
+   muted #94A3B8, button text #FFFFFF.
+   -------------------------------------------------------------------------- */
 html[data-theme='dark'] {
   color-scheme: dark;
   --surface: #131316;
   --surface-muted: #17171a;
   --line: #2c2c33;
+  --ink: #f8fafc;
+  --icon: #e2e8f0;
+  --secondary: #cbd5e1;
+  --muted: #94a3b8;
+  --gold: #fbbf24;
 }
 
 html[data-theme='dark'],
 html[data-theme='dark'] body {
   background-color: #0a0a0b;
-  color: #f4f4f5;
+  color: var(--ink);
 }
 
+/* Utility overrides live in the utilities layer so variant utilities
+   (`hover:bg-neutral-800`, `focus:text-...`) still win when active. */
+@layer utilities {
+/* --------------------------------------------------------------------------
+   Light theme ink
+   Primary text, icons and button surfaces use the brand navy (#0B1220).
+   -------------------------------------------------------------------------- */
+html:not([data-theme='dark']) [class~='text-neutral-950'],
+html:not([data-theme='dark']) [class~='text-neutral-900'],
+html:not([data-theme='dark']) [class~='text-neutral-800'] {
+  color: var(--ink);
+}
+
+html:not([data-theme='dark']) [class~='fill-neutral-950'] {
+  fill: var(--ink);
+}
+
+html:not([data-theme='dark']) [class~='stroke-neutral-950'] {
+  stroke: var(--ink);
+}
+
+/* Filled buttons, active pills and dark bands use the same navy.
+   Exact token only, so `group-hover:bg-neutral-950` stays a hover state. */
+html:not([data-theme='dark']) [class~='bg-neutral-950'] {
+  background-color: var(--ink);
+}
+
+/* --------------------------------------------------------------------------
+   Dark theme surfaces and colours
+   -------------------------------------------------------------------------- */
 html[data-theme='dark'] [class*='bg-white'] {
-  background-color: #131316;
+  background-color: #141419;
 }
 
 html[data-theme='dark'] [class~='bg-neutral-50'],
@@ -139,26 +187,71 @@ html[data-theme='dark'] [class*='bg-neutral-200'] {
   background-color: #2a2a30;
 }
 
+html[data-theme='dark'] [class*='bg-neutral-900'] {
+  background-color: #1c1c22;
+}
+
+html[data-theme='dark'] [class*='bg-neutral-800'] {
+  background-color: #24242a;
+}
+
+/* Primary buttons keep a clearly visible edge on the near-black canvas. */
+html[data-theme='dark'] [class~='bg-neutral-950'] {
+  background-color: #15151b;
+  box-shadow: inset 0 0 0 1px rgba(248, 250, 252, 0.16);
+}
+
+/* Headings and primary text. */
 html[data-theme='dark'] [class*='text-neutral-950'],
 html[data-theme='dark'] [class*='text-neutral-900'],
 html[data-theme='dark'] [class*='text-neutral-800'] {
-  color: #f4f4f5;
+  color: var(--ink);
 }
 
-html[data-theme='dark'] [class*='text-neutral-700'] {
-  color: #d4d4d8;
-}
-
+/* Secondary copy and labels. */
+html[data-theme='dark'] [class*='text-neutral-700'],
 html[data-theme='dark'] [class*='text-neutral-600'] {
-  color: #b4b4bb;
+  color: var(--secondary);
 }
 
-html[data-theme='dark'] [class*='text-neutral-500'] {
-  color: #9a9aa3;
-}
-
+/* Muted copy and placeholders. */
+html[data-theme='dark'] [class*='text-neutral-500'],
 html[data-theme='dark'] [class*='text-neutral-400'] {
-  color: #85858f;
+  color: var(--muted);
+}
+
+/* Empty rating stars stay dim rather than competing with filled gold ones. */
+html[data-theme='dark'] [class*='text-neutral-300'] {
+  color: #475569;
+}
+
+/* Icons inherit a dedicated light grey so they never disappear on dark cards. */
+html[data-theme='dark'] svg[class*='text-neutral-950'],
+html[data-theme='dark'] svg[class*='text-neutral-900'],
+html[data-theme='dark'] svg[class*='text-neutral-800'],
+html[data-theme='dark'] svg[class*='text-neutral-700'],
+html[data-theme='dark'] svg[class*='text-neutral-600'],
+html[data-theme='dark'] svg[class*='text-neutral-500'],
+html[data-theme='dark'] svg[class*='text-neutral-400'] {
+  color: var(--icon);
+}
+
+/* Filled icons (hearts, logos, badges) were staying near-black and vanishing. */
+html[data-theme='dark'] [class*='fill-neutral-950'] {
+  fill: var(--icon);
+}
+
+html[data-theme='dark'] [class*='stroke-neutral-950'] {
+  stroke: var(--icon);
+}
+
+/* Selected chips and focused inputs need a light border, not a black one. */
+html[data-theme='dark'] [class*='border-neutral-950'] {
+  border-color: var(--icon);
+}
+
+html[data-theme='dark'] [class*='outline-neutral-950'] {
+  outline-color: var(--icon);
 }
 
 html[data-theme='dark'] [class*='border-neutral-2'],
@@ -176,18 +269,49 @@ html[data-theme='dark'] textarea {
   color-scheme: dark;
 }
 
+html[data-theme='dark'] input::placeholder,
+html[data-theme='dark'] textarea::placeholder {
+  color: var(--muted);
+  opacity: 1;
+}
+
+/* Status colours keep their meaning but use dark-friendly tints. */
+html[data-theme='dark'] [class*='text-emerald-'] {
+  color: #6ee7b7;
+}
+
+html[data-theme='dark'] [class*='bg-emerald-'] {
+  background-color: rgba(16, 185, 129, 0.16);
+}
+
+html[data-theme='dark'] [class*='text-amber-'] {
+  color: #fcd34d;
+}
+
+html[data-theme='dark'] [class*='bg-amber-'] {
+  background-color: rgba(251, 191, 36, 0.16);
+}
+
+html[data-theme='dark'] [class*='text-red-'] {
+  color: #fca5a5;
+}
+
+html[data-theme='dark'] [class*='bg-red-'] {
+  background-color: rgba(239, 68, 68, 0.16);
+}
+
+html[data-theme='dark'] [class*='border-red-'] {
+  border-color: rgba(248, 113, 113, 0.55);
+}
+
 html[data-theme='dark'] .glass-surface {
-  background: rgba(19, 19, 22, 0.86);
+  background: rgba(20, 20, 25, 0.88);
   border-color: #2c2c33;
 }
 
 html[data-theme='dark'] .glass-card {
-  background: rgba(24, 24, 27, 0.82);
+  background: rgba(24, 24, 29, 0.84);
 }
-
-/* Dark accent chips keep their shape but gain a hairline so they read on dark. */
-html[data-theme='dark'] [class*='bg-neutral-950'] {
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
 }
 
 /* Desktop store frame: while the header is auto-hidden, the product frame
@@ -196,5 +320,47 @@ html[data-theme='dark'] [class*='bg-neutral-950'] {
   html[data-bars-hidden='true'] .desktop-app-frame {
     height: 100dvh;
     transform: translateY(-4rem);
+  }
+}
+
+/* First-visit preferences welcome: backdrop fade, panel spring, then a
+   staggered reveal of the language, appearance and currency groups. */
+@keyframes onboarding-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes onboarding-pop {
+  from { opacity: 0; transform: translateY(26px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes onboarding-item {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.onboarding-fade {
+  animation: onboarding-fade 260ms ease-out both;
+}
+
+.onboarding-pop {
+  animation: onboarding-pop 520ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.onboarding-stagger > * {
+  animation: onboarding-item 460ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.onboarding-stagger > *:nth-child(1) { animation-delay: 90ms; }
+.onboarding-stagger > *:nth-child(2) { animation-delay: 160ms; }
+.onboarding-stagger > *:nth-child(3) { animation-delay: 230ms; }
+.onboarding-stagger > *:nth-child(4) { animation-delay: 300ms; }
+
+@media (prefers-reduced-motion: reduce) {
+  .onboarding-fade,
+  .onboarding-pop,
+  .onboarding-stagger > * {
+    animation: none;
   }
 }

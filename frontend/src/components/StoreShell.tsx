@@ -3,6 +3,7 @@
 import React from 'react';
 import { MobileBottomNav, StoreHeader } from './StoreHeader';
 import { Footer } from './Footer';
+import { PreferencesOnboarding } from '@/features/settings/components/PreferencesOnboarding';
 import { SettingsPanel } from '@/features/settings/components/SettingsPanel';
 import { FloatingCartButton } from '@/features/cart/components/FloatingCartButton';
 
@@ -15,6 +16,7 @@ export const StoreShell: React.FC<{ children: React.ReactNode }> = ({ children }
       <MobileBottomNav />
       <FloatingCartButton />
       <SettingsPanel />
+      <PreferencesOnboarding />
     </div>
   );
 };

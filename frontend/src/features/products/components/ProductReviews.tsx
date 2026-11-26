@@ -34,7 +34,7 @@ function Stars({ value, size = 'sm' }: { value: number; size?: 'sm' | 'lg' }) {
       {[1, 2, 3, 4, 5].map((star) => (
         <Star
           key={star}
-          className={`${dimension} ${star <= Math.round(value) ? 'fill-neutral-950 text-neutral-950' : 'text-neutral-300'}`}
+          className={`${dimension} ${star <= Math.round(value) ? 'star-gold' : 'text-neutral-300'}`}
         />
       ))}
     </div>
@@ -403,9 +403,7 @@ export const ProductReviews: React.FC<ProductReviewsProps> = ({
                 >
                   <Star
                     className={`w-7 h-7 transition-colors ${
-                      star <= (hoverRating || draftRating)
-                        ? 'fill-neutral-950 text-neutral-950'
-                        : 'text-neutral-300'
+                      star <= (hoverRating || draftRating) ? 'star-gold' : 'text-neutral-300'
                     }`}
                   />
                 </button>

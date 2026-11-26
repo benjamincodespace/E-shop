@@ -195,9 +195,9 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       const savedTheme = window.localStorage.getItem(THEME_STORAGE_KEY);
       if (savedTheme === 'dark' || savedTheme === 'light') {
         setThemeState(savedTheme);
-      } else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-        setThemeState('dark');
       }
+      // First visit defaults to the white theme; the welcome step lets the
+      // visitor opt into dark instead of inheriting the operating system.
     } catch {
       // Storage blocked: fall back to English in light mode.
     }

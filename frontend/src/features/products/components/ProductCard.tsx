@@ -78,7 +78,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           </button>
           <p className="mt-1 text-xs text-neutral-500 line-clamp-2">{product.description}</p>
           <div className="mt-2 flex items-center gap-1.5 text-xs text-neutral-600">
-            <Star className="w-3.5 h-3.5 fill-neutral-950 text-neutral-950" />
+            <Star className="w-3.5 h-3.5 star-gold" />
             <span className="font-medium text-neutral-900 tabular-nums">
               {product.ratingAvg > 0 ? product.ratingAvg.toFixed(1) : 'New'}
             </span>
@@ -194,9 +194,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
               <Star
                 key={star}
                 className={`w-3 h-3 ${
-                  star <= Math.round(product.ratingAvg || 5)
-                    ? 'fill-neutral-950 text-neutral-950'
-                    : 'text-neutral-300'
+                  star <= Math.round(product.ratingAvg || 5) ? 'star-gold' : 'text-neutral-300'
                 }`}
               />
             ))}
