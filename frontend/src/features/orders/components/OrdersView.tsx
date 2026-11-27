@@ -167,7 +167,7 @@ export const OrderDetailView: React.FC<{ orderId: string }> = ({ orderId }) => {
                 <div>
                   <p className="font-semibold text-neutral-950">{item.productName}</p>
                   <p className="text-[11px] text-neutral-500">
-                    {item.quantity} × {item.size} · {item.color}
+                    {[`${item.quantity} ×`, item.size, item.color].filter(Boolean).join(' ')}
                   </p>
                 </div>
                 <span className="font-mono-num font-semibold text-neutral-950">

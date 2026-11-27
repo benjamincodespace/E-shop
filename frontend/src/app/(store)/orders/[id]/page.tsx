@@ -3,7 +3,7 @@ import { OrderDetailView } from '@/features/orders/components/OrdersView';
 
 export const metadata: Metadata = {
   title: 'Order Details',
-  description: 'Track one of your E-shop All orders.',
+  description: 'Track one of your E-shop orders.',
   robots: { index: false, follow: false },
 };
 

@@ -16,8 +16,8 @@ export async function generateMetadata({ params }: ProductPageProps): Promise<Me
 
   if (!data?.product) {
     return {
-      title: 'T-Shirt Details',
-      description: 'Explore minimalist heavyweight cotton T-shirts at E-shop All.',
+      title: 'Product Details',
+      description: 'Explore electronics, clothes, food and more at E-shop.',
       alternates: {
         canonical: `/product/${encodeURIComponent(slug)}`,
       },
@@ -30,7 +30,7 @@ export async function generateMetadata({ params }: ProductPageProps): Promise<Me
 
   return {
     title: {
-      absolute: p.seoTitle || `${p.name} — E-shop All`,
+      absolute: p.seoTitle || `${p.name} — E-shop`,
     },
     description: p.seoDescription || p.description,
     alternates: {
@@ -68,7 +68,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
             description: product.seoDescription || product.description,
             image: product.images.map((img) => (img.startsWith('http') ? img : `${origin}${img}`)),
             sku: product.slug,
-            brand: { '@type': 'Brand', name: 'E-shop All' },
+            brand: { '@type': 'Brand', name: 'E-shop' },
             category: product.categoryName,
             offers: {
               '@type': 'Offer',

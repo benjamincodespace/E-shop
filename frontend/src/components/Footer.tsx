@@ -50,7 +50,7 @@ export const Footer: React.FC = () => {
             </li>
             <li>
               <button type="button" onClick={() => navigate({ page: 'about' })} className="hover:text-neutral-950 cursor-pointer">
-                About E-shop All
+                About E-shop
               </button>
             </li>
             <li>
@@ -108,7 +108,7 @@ export const Footer: React.FC = () => {
       </div>
 
       <div className="border-t border-neutral-100 py-4 text-center text-[11px] text-neutral-400">
-        © {new Date().getFullYear()} E-shop All. All rights reserved.
+        © {new Date().getFullYear()} E-shop. All rights reserved.
       </div>
 
       <div className="border-t border-neutral-100 py-3 text-center">

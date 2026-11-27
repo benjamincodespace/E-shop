@@ -3,7 +3,7 @@ import { SignUpView } from '@/features/authentication/components/SignUpView';
 
 export const metadata: Metadata = {
   title: 'Create Account',
-  description: 'Create an E-shop All account with your phone number and password.',
+  description: 'Create an E-shop account with your phone number and password.',
   robots: { index: false, follow: false },
 };
 

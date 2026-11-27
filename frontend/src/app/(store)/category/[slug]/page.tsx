@@ -25,14 +25,14 @@ export async function generateMetadata({ params }: CategoryPageProps): Promise<M
   const { slug } = await params;
   const label = labelFromSlug(slug);
   return {
-    title: `${label} T-Shirts`,
-    description: `Shop ${label} T-shirts at ${SITE.name} — heavyweight cotton, minimalist cuts and fast shipping.`,
+    title: `${label} Products`,
+    description: `Shop ${label} products at ${SITE.name} — verified sellers, fair prices and fast shipping.`,
     alternates: { canonical: `/category/${slug}` },
     openGraph: {
       type: 'website',
       siteName: SITE.name,
-      title: `${label} T-Shirts — ${SITE.name}`,
-      description: `Shop ${label} T-shirts at ${SITE.name}.`,
+      title: `${label} — ${SITE.name}`,
+      description: `Shop ${label} products at ${SITE.name}.`,
       url: `/category/${slug}`,
     },
   };

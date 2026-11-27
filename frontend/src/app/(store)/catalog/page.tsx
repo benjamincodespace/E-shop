@@ -12,9 +12,9 @@ export async function generateMetadata({ searchParams }: CatalogPageProps): Prom
   const params = await searchParams;
   const cat = params.category && params.category !== 'all' ? params.category : '';
   return {
-    title: cat ? `${cat.charAt(0).toUpperCase() + cat.slice(1)} T-Shirts Catalog` : 'All T-Shirts Catalog',
+    title: cat ? `${cat.charAt(0).toUpperCase() + cat.slice(1)} — Shop` : 'Shop by Category',
     description:
-      'Browse all minimalist heavyweight cotton T-shirts. Filter by category, price range, and highest customer rating.',
+      'Pick a department — electronics, clothes, food and more — then filter by price range and customer rating.',
     alternates: {
       canonical: cat ? `/catalog?category=${encodeURIComponent(cat)}` : '/catalog',
     },

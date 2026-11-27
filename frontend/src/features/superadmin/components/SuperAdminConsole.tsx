@@ -724,7 +724,7 @@ export const SuperAdminConsole: React.FC = () => {
                     Welcome back, {user.name.split(' ')[0]}
                   </h2>
                   <p className="mt-1.5 text-xs sm:text-sm text-neutral-300">
-                    Every buyer, seller and product on E-shop All is under your control from this console.
+                    Every buyer, seller and product on E-shop is under your control from this console.
                   </p>
                 </div>
               </div>

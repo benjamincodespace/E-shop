@@ -208,6 +208,6 @@ func (h *AdminHandler) SubscribeNewsletter(w http.ResponseWriter, r *http.Reques
 	}
 	WriteJSON(w, http.StatusOK, map[string]interface{}{
 		"ok":      true,
-		"message": "Subscribed to E-shop All drops and updates.",
+		"message": "Subscribed to E-shop drops and updates.",
 	})
 }

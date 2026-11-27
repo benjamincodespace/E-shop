@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import { StoreProvider } from '@/context/StoreContext';
 import { ToastStack } from '@/components/ToastStack';
@@ -10,24 +10,35 @@ const siteOrigin = getSiteOrigin();
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteOrigin),
+  applicationName: SITE.name,
   title: {
     default: SITE.title,
     template: `%s — ${SITE.name}`,
   },
   description: SITE.description,
+  keywords: [...SITE.keywords],
+  authors: [{ name: SITE.name, url: siteOrigin }],
+  creator: SITE.name,
+  publisher: SITE.name,
+  category: 'shopping',
   alternates: {
     canonical: '/',
+  },
+  formatDetection: {
+    email: false,
+    address: false,
+    telephone: false,
   },
   openGraph: {
     type: 'website',
     siteName: SITE.name,
     title: SITE.title,
-    description:
-      'Shop heavyweight monochrome T-shirts crafted for everyday comfort. Browse popular drops, verified customer reviews, and fast shipping.',
+    description: SITE.description,
     url: siteOrigin,
+    locale: 'en_US',
     images: [
       {
-        url: '/images/hero_monochrome_tee_1795513062252.jpg',
+        url: SITE.shareImage,
         width: 1200,
         height: 630,
         alt: `${SITE.name} — ${SITE.tagline}`,
@@ -38,12 +49,29 @@ export const metadata: Metadata = {
     card: 'summary_large_image',
     title: SITE.title,
     description: SITE.description,
-    images: ['/images/hero_monochrome_tee_1795513062252.jpg'],
+    images: [SITE.shareImage],
   },
   robots: {
     index: true,
     follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      'max-image-preview': 'large',
+      'max-snippet': -1,
+      'max-video-preview': -1,
+    },
   },
+  ...(process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION
+    ? { verification: { google: process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION } }
+    : {}),
+};
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  themeColor: '#ffffff',
+  colorScheme: 'light',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

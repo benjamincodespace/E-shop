@@ -12,7 +12,7 @@ import {
   Star,
   ThumbsUp,
 } from 'lucide-react';
-import type { Product, Review, TeeSize } from '@/types/store';
+import type { Product, Review } from '@/types/store';
 import { api } from '@/services/api';
 import { calculateDiscountPercent, getEffectivePrice, getStockBadgeInfo } from '@/lib/storeLogic';
 import { useStore } from '@/context/StoreContext';
@@ -49,10 +49,10 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
   const [error, setError] = useState('');
 
   const [activeImageIdx, setActiveImageIdx] = useState(0);
-  const [selectedSize, setSelectedSize] = useState<TeeSize>(
-    initialProduct?.sizes.includes('M') ? 'M' : initialProduct?.sizes[0] || 'M',
+  const [selectedSize, setSelectedSize] = useState<string>(
+    initialProduct?.sizes.includes('M') ? 'M' : initialProduct?.sizes[0] || '',
   );
-  const [selectedColor, setSelectedColor] = useState<string>(initialProduct?.colors[0]?.name || 'Black');
+  const [selectedColor, setSelectedColor] = useState<string>(initialProduct?.colors[0]?.name || '');
   const [quantity, setQuantity] = useState(1);
   const [activeTab, setActiveTab] = useState<'description' | 'reviews' | 'shipping'>('reviews');
 
@@ -64,8 +64,8 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
       setProduct(res.product);
       setReviews(res.reviews);
       setRatingSummary(res.ratingSummary);
-      setSelectedSize(res.product.sizes.includes('M') ? 'M' : res.product.sizes[0] || 'M');
-      setSelectedColor(res.product.colors[0]?.name || 'Black');
+      setSelectedSize(res.product.sizes.includes('M') ? 'M' : res.product.sizes[0] || '');
+      setSelectedColor(res.product.colors[0]?.name || '');
       setActiveImageIdx(0);
       setQuantity(1);
     } catch (err) {
@@ -101,14 +101,14 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
   if (error || !product) {
     return (
       <div className="max-w-3xl mx-auto px-4 py-16 text-center">
-        <h1 className="font-display text-2xl font-bold text-neutral-950">T-Shirt Not Found</h1>
+                  <h1 className="font-display text-2xl font-bold text-neutral-950">Product Not Found</h1>
         <p className="mt-2 text-sm text-neutral-500">{error || 'This product may have been archived.'}</p>
         <button
           type="button"
           onClick={() => navigate({ page: 'catalog' })}
           className="mt-6 px-6 py-2.5 rounded-full bg-neutral-950 text-white text-xs font-semibold cursor-pointer"
         >
-          Browse All T-Shirts
+          Browse all products
         </button>
       </div>
     );
@@ -267,7 +267,8 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
 
           <p className="mt-4 text-sm text-neutral-600 leading-relaxed">{product.description}</p>
 
-          {/* Size selector */}
+          {/* Size selector (hidden for products without size variants) */}
+          {product.sizes.length > 0 && (
           <div className="mt-6">
             <span className="block text-xs font-semibold text-neutral-900 mb-2">{t('product.size')}</span>
             <div className="flex flex-wrap gap-2">
@@ -287,8 +288,10 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
               ))}
             </div>
           </div>
+          )}
 
-          {/* Color selector */}
+          {/* Colour selector (hidden when a product has no colour options) */}
+          {product.colors.length > 0 && (
           <div className="mt-5">
             <span className="block text-xs font-semibold text-neutral-900 mb-2">
               {t('product.color')}: <span className="font-normal text-neutral-600">{selectedColor}</span>
@@ -310,6 +313,7 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
               ))}
             </div>
           </div>
+          )}
 
           {/* Quantity + CTA */}
           <div className="mt-6 flex items-center gap-3">
@@ -393,9 +397,12 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
           <div className="py-6 max-w-3xl space-y-3 text-sm text-neutral-600 leading-relaxed">
             <p>{product.description}</p>
             <ul className="list-disc pl-5 space-y-1.5 text-neutral-700">
-              <li>100% combed ring-spun cotton jersey crafted for structured drape.</li>
-              <li>Pre-shrunk wash finish with double-needle sleeve and bottom hems.</li>
-              <li>Available sizes: {product.sizes.join(', ')}.</li>
+              <li>Department: {product.categoryName}.</li>
+              <li>{product.stock > 0 ? `${product.stock} in stock and ready to ship.` : 'Currently out of stock.'}</li>
+              {product.sizes.length > 0 && <li>Available sizes: {product.sizes.join(', ')}.</li>}
+              {product.colors.length > 0 && (
+                <li>Available colours: {product.colors.map((c) => c.name).join(', ')}.</li>
+              )}
             </ul>
           </div>
         )}

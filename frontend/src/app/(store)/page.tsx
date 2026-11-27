@@ -6,10 +6,10 @@ export const revalidate = 30;
 
 export const metadata: Metadata = {
   title: {
-    absolute: 'E-shop All — Minimalist Premium T-Shirt Store',
+    absolute: 'E-shop — Electronics, Clothes & Food Marketplace',
   },
   description:
-    'Shop heavyweight monochrome T-shirts crafted for everyday comfort. Browse popular drops, verified customer reviews, and fast shipping.',
+    'Shop electronics, clothes, food and more in one marketplace. Browse by department, compare verified customer reviews and check out with fast shipping.',
   alternates: {
     canonical: '/',
   },
@@ -28,7 +28,7 @@ export default async function HomePage() {
       {
         '@type': 'Organization',
         '@id': `${origin}/#organization`,
-        name: 'E-shop All',
+        name: 'E-shop',
         url: origin,
         logo: `${origin}/images/hero_monochrome_tee_1795513062252.jpg`,
       },
@@ -36,7 +36,7 @@ export default async function HomePage() {
         '@type': 'WebSite',
         '@id': `${origin}/#website`,
         url: origin,
-        name: 'E-shop All',
+        name: 'E-shop',
         publisher: { '@id': `${origin}/#organization` },
         potentialAction: {
           '@type': 'SearchAction',

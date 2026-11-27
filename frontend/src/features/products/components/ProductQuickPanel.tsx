@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { ArrowRight, Heart, Minus, Plus, ShoppingCart, Star } from 'lucide-react';
-import type { Product, Review, TeeSize } from '@/types/store';
+import type { Product, Review } from '@/types/store';
 import { calculateDiscountPercent, getEffectivePrice } from '@/lib/storeLogic';
 import { api } from '@/services/api';
 import { useStore } from '@/context/StoreContext';
@@ -16,15 +16,15 @@ interface ProductQuickPanelProps {
 
 export const ProductQuickPanel: React.FC<ProductQuickPanelProps> = ({ product }) => {
   const { addToCart, toggleWishlist, wishlistIds, navigate, currency } = useStore();
-  const [selectedSize, setSelectedSize] = useState<TeeSize>('M');
-  const [selectedColor, setSelectedColor] = useState<string>('Black');
+  const [selectedSize, setSelectedSize] = useState<string>('');
+  const [selectedColor, setSelectedColor] = useState<string>('');
   const [quantity, setQuantity] = useState(1);
   const [reviews, setReviews] = useState<Review[]>([]);
 
   useEffect(() => {
     if (!product) return;
-    setSelectedSize(product.sizes.includes('M') ? 'M' : product.sizes[0] || 'M');
-    setSelectedColor(product.colors[0]?.name || 'Black');
+    setSelectedSize(product.sizes.includes('M') ? 'M' : product.sizes[0] || '');
+    setSelectedColor(product.colors[0]?.name || '');
     setQuantity(1);
 
     api
@@ -36,7 +36,7 @@ export const ProductQuickPanel: React.FC<ProductQuickPanelProps> = ({ product })
   if (!product) {
     return (
       <aside className="bg-white border border-neutral-200/80 rounded-2xl p-6 text-center text-sm text-neutral-500">
-        Select any T-shirt to view sizing, stock, and verified customer reviews.
+        Select any product to view options, stock, and verified customer reviews.
       </aside>
     );
   }
@@ -106,7 +106,8 @@ export const ProductQuickPanel: React.FC<ProductQuickPanelProps> = ({ product })
         </div>
       </div>
 
-      {/* Size Selector */}
+      {/* Size Selector (only for products with size variants) */}
+      {product.sizes.length > 0 && (
       <div className="mt-5">
         <div className="flex items-center justify-between text-xs mb-2">
           <span className="font-semibold text-neutral-900">Size</span>
@@ -131,6 +132,7 @@ export const ProductQuickPanel: React.FC<ProductQuickPanelProps> = ({ product })
           ))}
         </div>
       </div>
+      )}
 
       {/* Color & Quantity */}
       <div className="mt-4 flex items-end justify-between gap-4">
@@ -157,7 +159,7 @@ export const ProductQuickPanel: React.FC<ProductQuickPanelProps> = ({ product })
           </div>
         </div>
 
-        <div className="flex items-center gap-1.5">
+        <div className={`flex items-center gap-1.5 ${product.colors.length === 0 ? 'hidden' : ''}`}>
           {product.colors.map((c) => (
             <button
               key={c.name}

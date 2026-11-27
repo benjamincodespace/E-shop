@@ -4,11 +4,22 @@
  * from here instead of being repeated across components.
  */
 export const SITE = {
-  name: 'E-shop All',
+  name: 'E-shop',
   tagline: 'Wear Your Style',
-  title: 'E-shop All — Minimalist Premium T-Shirt Store',
+  title: 'E-shop — Electronics, Clothes & Food Marketplace',
   description:
-    'Shop heavyweight monochrome T-shirts crafted for everyday comfort. Browse popular drops, verified customer reviews, and fast shipping.',
+    'Shop electronics, clothes, food and more in one marketplace. Browse by department, compare verified customer reviews and check out with fast shipping.',
+  keywords: [
+    'E-shop',
+    'online marketplace',
+    'buy electronics online',
+    'clothing store',
+    'buy food online',
+    'online shopping',
+    'general e-commerce store',
+  ],
+  /** Default social / OpenGraph share image inside `public/`. */
+  shareImage: '/images/hero_monochrome_tee_1795513062252.jpg',
   supportEmail: 'support@eshopall.studio',
   defaultCurrency: 'USD',
   defaultLanguage: 'en',

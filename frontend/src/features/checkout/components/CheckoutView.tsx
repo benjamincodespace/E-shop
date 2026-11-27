@@ -815,7 +815,9 @@ export const CheckoutView: React.FC = () => {
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-semibold text-neutral-950 truncate">{item.productName}</p>
                   <p className="text-[11px] text-neutral-500">
-                    Size {item.size} · Qty {item.quantity}
+                    {[[item.size && `Size ${item.size}`, item.color].filter(Boolean).join(' · '), `Qty ${item.quantity}`]
+                      .filter(Boolean)
+                      .join(' · ')}
                   </p>
                 </div>
                 <span className="font-mono-num text-xs font-semibold text-neutral-950">

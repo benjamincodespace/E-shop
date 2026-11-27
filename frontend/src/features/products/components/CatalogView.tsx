@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, LayoutGrid, List, RotateCcw } from 'lucide-react';
+import { ArrowRight, ChevronLeft, ChevronRight, LayoutGrid, List, RotateCcw } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
 import { filterAndSortProducts } from '@/lib/storeLogic';
 import { formatPrice } from '@/utils/currency';
@@ -117,6 +117,11 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
     window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
   }, [safePage]);
 
+  // Shoppers choose a department (Electronics, Clothes, Food, …) before they
+  // see any products; searching sidesteps the chooser.
+  const selectedCategory = categories.find((c) => c.slug === categorySlug);
+  const showCategoryGate = categorySlug === 'all' && !globalSearch.trim() && !loading;
+
   const resetFilters = () => {
     setCategorySlug('all');
     setPriceRange('all');
@@ -216,9 +221,57 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
 
         {/* Main Product Catalog Grid */}
         <section ref={gridRef} className="lg:col-span-9 scroll-mt-24">
+          {showCategoryGate && (
+            <div className="mb-5">
+              <h1 className="font-display text-2xl font-bold text-neutral-950">Shop by category</h1>
+              <p className="mt-1 text-xs text-neutral-500">
+                Pick a department first, then explore its products.
+              </p>
+            </div>
+          )}
+
+          {showCategoryGate && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+              {categories.map((cat) => (
+                <button
+                  key={cat.id}
+                  type="button"
+                  onClick={() => {
+                    setCategorySlug(cat.slug);
+                    setPage(1);
+                  }}
+                  className="group text-left rounded-2xl border border-neutral-200/80 bg-white p-5 hover:border-neutral-950 hover:shadow-[0_8px_24px_rgba(0,0,0,0.06)] transition-all cursor-pointer"
+                >
+                  <p className="font-display text-base font-bold text-neutral-950">{cat.name}</p>
+                  <p className="mt-1 text-xs text-neutral-500 line-clamp-2 min-h-[2rem]">
+                    {cat.description || `Browse everything in ${cat.name}.`}
+                  </p>
+                  <p className="mt-3 text-[11px] font-semibold text-neutral-600 tabular-nums">
+                    {cat.productCount ?? 0} product{cat.productCount === 1 ? '' : 's'}
+                  </p>
+                  <span className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-neutral-950">
+                    Explore
+                    <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" />
+                  </span>
+                </button>
+              ))}
+              {categories.length === 0 && (
+                <div className="sm:col-span-2 xl:col-span-3 bg-neutral-50 border border-neutral-200/80 rounded-2xl p-10 text-center">
+                  <p className="font-display text-base font-bold text-neutral-950">No categories yet</p>
+                  <p className="mt-1 text-xs text-neutral-500">
+                    Sellers add categories such as Electronics, Clothes and Food from the admin console.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className={showCategoryGate ? 'hidden' : undefined}>
           <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
             <div>
-              <h1 className="font-display text-2xl font-bold text-neutral-950">All T-Shirts</h1>
+              <h1 className="font-display text-2xl font-bold text-neutral-950">
+                {selectedCategory ? selectedCategory.name : 'All products'}
+              </h1>
               <p className="text-xs text-neutral-500 mt-0.5 tabular-nums">
                 {filtered.length} product{filtered.length === 1 ? '' : 's'}
                 {globalSearch ? ` matching "${globalSearch}"` : ''}
@@ -270,16 +323,16 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
             </div>
           ) : pagedProducts.length === 0 ? (
             <div className="bg-neutral-50 border border-neutral-200/80 rounded-2xl p-12 text-center">
-              <h2 className="font-display text-lg font-bold text-neutral-950">No T-shirts match these filters</h2>
+              <h2 className="font-display text-lg font-bold text-neutral-950">No products match these filters</h2>
               <p className="mt-1.5 text-xs text-neutral-500">
-                Adjust your category or price filter to see available styles.
+                Adjust your category or price filter to see available items.
               </p>
               <button
                 type="button"
                 onClick={resetFilters}
                 className="mt-5 px-5 py-2.5 rounded-full bg-neutral-950 text-white text-xs font-semibold cursor-pointer"
               >
-                Show All T-Shirts
+                Back to categories
               </button>
             </div>
           ) : (
@@ -333,6 +386,7 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
               </button>
             </nav>
           )}
+          </div>
         </section>
       </div>
     </div>

@@ -49,7 +49,7 @@ import { AdminReviewsPanel } from './AdminReviewsPanel';
 
 type AdminTab = 'dashboard' | 'products' | 'orders' | 'customers' | 'reviews' | 'analytics' | 'settings';
 
-const SEO_TITLE_SUFFIX = ' | E-shop All';
+const SEO_TITLE_SUFFIX = ' | E-shop';
 const SEO_DESCRIPTION_MAX = 155;
 
 /** SEO title derived from the product name. */
@@ -72,13 +72,13 @@ function buildSeoDescription(description: string, name: string): string {
   if (!trimmedDesc) {
     return trimmedName
       ? clampSeoDescription(
-          `Shop the ${trimmedName} at E-shop All — heavyweight monochrome tees with verified reviews and fast shipping.`,
+          `Shop the ${trimmedName} at E-shop — heavyweight monochrome tees with verified reviews and fast shipping.`,
         )
       : '';
   }
   const base = trimmedDesc.replace(/\s+/g, ' ');
   if (trimmedName && base.length < 70) {
-    return clampSeoDescription(`${base} Shop the ${trimmedName} at E-shop All.`);
+    return clampSeoDescription(`${base} Shop the ${trimmedName} at E-shop.`);
   }
   return clampSeoDescription(base);
 }
@@ -218,7 +218,7 @@ export const AdminDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }
 
   const [formCategoryId, setFormCategoryId] = useState<string>('');
   const [formImages, setFormImages] = useState<string[]>([]);
-  const [formSizes, setFormSizes] = useState<TeeSize[]>(['S', 'M', 'L', 'XL']);
+  const [formSizes, setFormSizes] = useState<string[]>(['S', 'M', 'L', 'XL']);
   const [formColorsText, setFormColorsText] = useState('Black:#111111, White:#FFFFFF');
   const [formStock, setFormStock] = useState('15');
   const [formFeatured, setFormFeatured] = useState(true);
@@ -237,6 +237,9 @@ export const AdminDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }
   // Category creation state
   const [newCatName, setNewCatName] = useState('');
   const [newCatDesc, setNewCatDesc] = useState('');
+  // Inline category creation inside the product form (sellers included).
+  const [inlineCatName, setInlineCatName] = useState('');
+  const [creatingInlineCat, setCreatingInlineCat] = useState(false);
 
   // Admin dialogs are overlay panels; freeze the dashboard behind them so the
   // wheel stays inside the dialog instead of scrolling the page underneath.
@@ -338,7 +341,7 @@ export const AdminDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }
         }
         setClaimAvatar(null);
       }
-      notify('Admin account initialized. Welcome to E-shop All Admin!', 'success');
+      notify('Admin account initialized. Welcome to E-shop Admin!', 'success');
     } catch (err) {
       notify(err instanceof Error ? err.message : 'Admin setup failed.', 'error');
     } finally {
@@ -351,7 +354,7 @@ export const AdminDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }
     setAuthSubmitting(true);
     try {
       await loginUser(authEmail, authPassword);
-      notify('Signed in to E-shop All Admin Panel', 'success');
+      notify('Signed in to E-shop Admin Panel', 'success');
     } catch (err) {
       notify(err instanceof Error ? err.message : 'Admin sign-in failed.', 'error');
     } finally {
@@ -383,6 +386,7 @@ export const AdminDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }
     setFormImages([]);
     setFormSizes(['S', 'M', 'L', 'XL']);
     setFormColorsText('Black:#111111, White:#FFFFFF');
+    setInlineCatName('');
     setFormStock('20');
     setFormFeatured(true);
     setFormPopular(true);
@@ -404,6 +408,7 @@ export const AdminDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }
     setFormCategoryId(p.categoryId || categories[0]?.id || '');
     setFormImages(p.images);
     setFormSizes(p.sizes);
+    setInlineCatName('');
     setFormColorsText(p.colors.map((c) => `${c.name}:${c.hex}`).join(', '));
     setFormStock(String(p.stock));
     setFormFeatured(p.featured);
@@ -456,8 +461,12 @@ export const AdminDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }
       notify('Create a category before saving a product.', 'error');
       return;
     }
+    if (!formCategoryId && categories.length > 0) {
+      notify('Choose the product category before uploading.', 'error');
+      return;
+    }
     if (formImages.length === 0) {
-      notify('Add at least one product image.', 'error');
+      notify('Upload at least one product image before saving.', 'error');
       return;
     }
     if (uploadingImg) {
@@ -484,8 +493,8 @@ export const AdminDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }
         discountPrice: formDiscountPrice.trim() ? Number(formDiscountPrice) : null,
         categoryId: formCategoryId || categories[0]?.id || '',
         images: formImages,
-        sizes: formSizes.length > 0 ? formSizes : ['M', 'L'],
-        colors: colors.length > 0 ? colors : [{ name: 'Black', hex: '#111111' }],
+        sizes: formSizes,
+        colors,
         stock: Number(formStock),
         featured: formFeatured,
         popular: formPopular,
@@ -591,6 +600,24 @@ export const AdminDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }
       await Promise.all([loadAdminData(), refreshCatalog()]);
     } catch (err) {
       notify(err instanceof Error ? err.message : 'Could not create category.', 'error');
+    }
+  };
+
+  /** Creates a category from inside the product form and selects it. */
+  const handleCreateCategoryInline = async () => {
+    const name = inlineCatName.trim();
+    if (!name || creatingInlineCat) return;
+    setCreatingInlineCat(true);
+    try {
+      const res = await api.createCategory({ name, description: '' });
+      setInlineCatName('');
+      setFormCategoryId(res.category.id);
+      notify(`Category "${res.category.name}" created`, 'success');
+      await Promise.all([loadAdminData(), refreshCatalog()]);
+    } catch (err) {
+      notify(err instanceof Error ? err.message : 'Could not create category.', 'error');
+    } finally {
+      setCreatingInlineCat(false);
     }
   };
 
@@ -812,7 +839,7 @@ export const AdminDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }
               <div>
                 <h1 className="font-display text-xl font-bold text-neutral-950">Admin Console Sign In</h1>
                 <p className="mt-1 text-xs text-neutral-500">
-                  Restricted to authorized E-shop All administrators.
+                  Restricted to authorized E-shop administrators.
                 </p>
               </div>
               <div>
@@ -1139,7 +1166,7 @@ export const AdminDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }
                 <div className="hidden sm:block w-56 h-28 rounded-2xl overflow-hidden shrink-0">
                   <SafeImage
                     src="/images/admin_white_tee_banner_1795513064922.jpg"
-                    alt="E-shop All Admin Banner"
+                    alt="E-shop Admin Banner"
                     className="w-full h-full object-cover"
                   />
                 </div>
@@ -1787,7 +1814,7 @@ export const AdminDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }
                     id="set-name"
                     type="text"
                     value={settings.storeName ?? ''}
-                    placeholder="E-shop All"
+                    placeholder="E-shop"
                     onChange={(e) => setSettings((s) => ({ ...s, storeName: e.target.value }))}
                     className="w-full rounded-xl border border-neutral-200 px-3.5 py-2.5 text-sm"
                   />
@@ -2131,13 +2158,43 @@ export const AdminDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }
                     onChange={(e) => setFormCategoryId(e.target.value)}
                     className="w-full rounded-xl border border-neutral-200 px-3 py-2 text-sm bg-white"
                   >
+                    {categories.length === 0 && <option value="">No categories yet</option>}
                     {categories.map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.name}
                       </option>
                     ))}
                   </select>
+                  <div className="mt-2 flex items-center gap-1.5">
+                    <input
+                      type="text"
+                      value={inlineCatName}
+                      onChange={(e) => setInlineCatName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          void handleCreateCategoryInline();
+                        }
+                      }}
+                      placeholder="New category e.g. Electronics, Food"
+                      aria-label="New category name"
+                      className="flex-1 min-w-0 rounded-xl border border-neutral-200 px-2.5 py-1.5 text-xs"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => void handleCreateCategoryInline()}
+                      disabled={!inlineCatName.trim() || creatingInlineCat}
+                      className="px-2.5 py-1.5 rounded-xl bg-neutral-950 text-white text-[11px] font-semibold disabled:opacity-40 cursor-pointer whitespace-nowrap"
+                    >
+                      {creatingInlineCat ? 'Adding…' : '+ Add category'}
+                    </button>
+                  </div>
                 </div>              </div>
+
+              <p className="text-[11px] text-neutral-500 -mt-1">
+                Choose the product category first, then upload its image. Buyers pick a category before
+                they browse, so every product needs one.
+              </p>
 
               <div>
                 <label htmlFor="p-currency" className="block text-xs font-semibold text-neutral-800 mb-1">
@@ -2160,7 +2217,7 @@ export const AdminDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }
               {/* Cloudinary image upload */}
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-semibold text-neutral-800">Product Images (Cloudinary)</span>
+                  <span className="text-xs font-semibold text-neutral-800">Product Image (required)</span>
 
 
                   <label className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-neutral-100 hover:bg-neutral-200 text-xs font-semibold text-neutral-900 cursor-pointer">
@@ -2228,9 +2285,11 @@ export const AdminDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }
                 </div>
               </div>
 
-              {/* Sizes */}
+              {/* Sizes (optional — electronics, food and other non-apparel items have none) */}
               <div>
-                <span className="block text-xs font-semibold text-neutral-800 mb-1.5">Available Sizes</span>
+                <span className="block text-xs font-semibold text-neutral-800 mb-1.5">
+                  Available Sizes <span className="font-normal text-neutral-500">(optional)</span>
+                </span>
                 <div className="flex flex-wrap gap-2">
                   {ALL_SIZES.map((sz) => {
                     const active = formSizes.includes(sz);
@@ -2254,12 +2313,15 @@ export const AdminDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }
                     );
                   })}
                 </div>
+                <p className="mt-1.5 text-[11px] text-neutral-500">
+                  Leave none selected for products without sizes. Colours below are optional too.
+                </p>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label htmlFor="p-colors" className="block text-xs font-semibold text-neutral-800 mb-1">
-                    Colors (Name:#Hex, comma-separated)
+                    Colors (Name:#Hex, comma-separated — optional)
                   </label>
                   <input
                     id="p-colors"

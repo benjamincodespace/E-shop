@@ -43,7 +43,7 @@ export const StoreHeader: React.FC = () => {
           type="button"
           onClick={() => navigate({ page: 'home' })}
           className="shrink-0 cursor-pointer focus-visible:outline-2 focus-visible:outline-neutral-950 rounded-lg"
-          aria-label="E-shop All Home"
+          aria-label="E-shop Home"
         >
           <BrandLogo subtitle="Wear Your Style" />
         </button>

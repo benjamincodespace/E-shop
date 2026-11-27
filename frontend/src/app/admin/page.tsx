@@ -3,7 +3,7 @@ import { AdminDashboard } from '@/features/admin/components/AdminDashboard';
 
 export const metadata: Metadata = {
   title: 'Admin Console',
-  description: 'Protected E-shop All Admin Console.',
+  description: 'Protected E-shop Admin Console.',
   robots: { index: false, follow: false },
 };
 

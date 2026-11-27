@@ -1,9 +1,10 @@
 'use client';
 
 import React, { useState } from 'react';
-import { ArrowRight, Minus, Plus, ShoppingBag, Trash2 } from 'lucide-react';
+import { ArrowRight, History, Minus, Plus, ShoppingBag, Trash2 } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
 import { calculateCartSummary } from '@/lib/storeLogic';
+import type { CartLogAction } from '@/features/cart/lib/cartLog';
 import { formatCurrency, formatPrice } from '@/utils/currency';
 import { SafeImage } from '@/components/SafeImage';
 
@@ -64,9 +65,13 @@ export const CartView: React.FC = () => {
                   >
                     {item.productName}
                   </button>
-                  <p className="text-xs text-neutral-500 mt-0.5">
-                    Size: {item.size} · Color: {item.color}
-                  </p>
+                  {(item.size || item.color) && (
+                    <p className="text-xs text-neutral-500 mt-0.5">
+                      {[item.size && `Size: ${item.size}`, item.color && `Color: ${item.color}`]
+                        .filter(Boolean)
+                        .join(' · ')}
+                    </p>
+                  )}
                   <p className="font-mono-num text-sm font-semibold text-neutral-900 mt-1">
                     {formatPrice(item.unitPrice, 'USD', currency)}
                   </p>
@@ -143,7 +148,73 @@ export const CartView: React.FC = () => {
           </div>
         </div>
       )}
+
+      <CartActivityLog />
     </div>
+  );
+};
+
+const ACTION_LABEL: Record<CartLogAction, string> = {
+  added: 'Added to cart',
+  quantity: 'Quantity updated',
+  removed: 'Removed from cart',
+  cleared: 'Cart cleared',
+};
+
+/** Device-local history of what happened to the cart, newest first. */
+const CartActivityLog: React.FC = () => {
+  const { cartLog, clearCartLog } = useStore();
+  const [open, setOpen] = useState(false);
+
+  if (cartLog.length === 0) return null;
+
+  return (
+    <section className="mt-8 bg-white border border-neutral-200/80 rounded-2xl">
+      <div className="flex items-center justify-between gap-3 px-4 sm:px-5 py-3">
+        <button
+          type="button"
+          onClick={() => setOpen((value) => !value)}
+          aria-expanded={open}
+          className="inline-flex items-center gap-2 text-xs font-semibold text-neutral-900 hover:text-neutral-600 cursor-pointer"
+        >
+          <History className="w-4 h-4" />
+          <span>Cart activity log ({cartLog.length})</span>
+        </button>
+        <button
+          type="button"
+          onClick={clearCartLog}
+          className="text-[11px] font-semibold text-neutral-500 hover:text-neutral-950 cursor-pointer"
+        >
+          Clear log
+        </button>
+      </div>
+
+      {open && (
+        <ul className="border-t border-neutral-100 divide-y divide-neutral-100">
+          {cartLog.map((entry) => (
+            <li
+              key={entry.id}
+              className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-4 sm:px-5 py-2.5 text-xs"
+            >
+              <span className="font-semibold text-neutral-900">
+                {ACTION_LABEL[entry.action]} · {entry.productName}
+              </span>
+              <span className="font-mono-num text-neutral-500 text-[11px]">
+                {entry.action === 'cleared'
+                  ? `${entry.quantity} items`
+                  : [[entry.size && `Size ${entry.size}`, entry.color]
+                      .filter(Boolean)
+                      .join(' · '), `Qty ${entry.quantity}`]
+                      .filter(Boolean)
+                      .join(' · ')}
+                {' · '}
+                {new Date(entry.at).toLocaleString()}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 };
 

@@ -78,7 +78,8 @@ export interface Product {
   sellerId?: string;
   sellerName?: string;
   images: string[];
-  sizes: TeeSize[];
+  /** Optional variants; empty for products that have no sizes (electronics, food). */
+  sizes: string[];
   colors: TeeColorOption[];
   stock: number;
   featured: boolean;
@@ -153,7 +154,8 @@ export interface CartItem {
   productName: string;
   productSlug: string;
   productImage: string;
-  size: TeeSize;
+  /** Empty when the product has no size options. */
+  size: string;
   color: string;
   quantity: number;
   unitPrice: number;
@@ -167,7 +169,7 @@ export interface OrderItem {
   productName: string;
   productSlug: string;
   productImage: string;
-  size: TeeSize;
+  size: string;
   color: string;
   quantity: number;
   unitPrice: number;

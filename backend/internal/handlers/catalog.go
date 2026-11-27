@@ -250,7 +250,8 @@ func (h *CatalogHandler) CreateProduct(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if len(imgs) == 0 {
-		imgs = []string{"/images/tee_black_classic_1795513062767.jpg"}
+		WriteError(w, http.StatusBadRequest, "At least one product image is required.")
+		return
 	}
 	if len(imgs) > 8 {
 		imgs = imgs[:8]
@@ -269,16 +270,18 @@ func (h *CatalogHandler) CreateProduct(w http.ResponseWriter, r *http.Request) {
 	if h.sellerQuotaExceeded(w, r, claims, imgs, "") {
 		return
 	}
+	// Sizes and colours stay optional: electronics, food and most non-apparel
+	// products are sold without variants.
 	sizes := body.Sizes
-	if len(sizes) == 0 {
-		sizes = []string{"S", "M", "L", "XL"}
+	if sizes == nil {
+		sizes = []string{}
 	}
 	if len(sizes) > 10 {
 		sizes = sizes[:10]
 	}
 	colors := body.Colors
-	if len(colors) == 0 {
-		colors = []models.TeeColorOption{{Name: "Black", Hex: "#111111"}}
+	if colors == nil {
+		colors = []models.TeeColorOption{}
 	}
 	if len(colors) > 20 {
 		colors = colors[:20]
@@ -298,7 +301,7 @@ func (h *CatalogHandler) CreateProduct(w http.ResponseWriter, r *http.Request) {
 	popular := body.Popular != nil && *body.Popular
 	seoTitle := strings.TrimSpace(body.SEOTitle)
 	if seoTitle == "" {
-		seoTitle = name + " | E-shop All"
+		seoTitle = name + " | E-shop"
 	}
 	seoDesc := strings.TrimSpace(body.SEODescription)
 	if seoDesc == "" {

@@ -2,7 +2,13 @@ import type { Category, Product, Review } from '@/types/store';
 import { SITE } from '@/config/site';
 
 export function getSiteOrigin(): string {
-  const raw = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || 'http://localhost:3000';
+  // VERCEL_URL points at the current Vercel deployment (preview URLs included),
+  // so metadata and sitemap links stay absolute even before a custom domain is
+  // attached. Set NEXT_PUBLIC_APP_URL in production to pin the canonical domain.
+  const raw =
+    process.env.NEXT_PUBLIC_APP_URL ||
+    process.env.APP_URL ||
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
   return raw.replace(/\/+$/, '');
 }
 

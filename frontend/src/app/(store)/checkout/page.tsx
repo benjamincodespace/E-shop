@@ -3,7 +3,7 @@ import { CheckoutView } from '@/features/cart/components/CartCheckoutViews';
 
 export const metadata: Metadata = {
   title: 'Checkout',
-  description: 'Complete your E-shop All T-shirt order.',
+  description: 'Complete your E-shop T-shirt order.',
   robots: { index: false, follow: false },
 };
 

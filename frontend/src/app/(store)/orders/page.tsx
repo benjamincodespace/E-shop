@@ -3,7 +3,7 @@ import { OrdersView } from '@/features/orders/components/OrdersView';
 
 export const metadata: Metadata = {
   title: 'Your Orders',
-  description: 'Review the orders placed with your E-shop All account.',
+  description: 'Review the orders placed with your E-shop account.',
   robots: { index: false, follow: false },
 };
 

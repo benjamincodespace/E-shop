@@ -5,6 +5,13 @@ import { usePathname, useRouter } from 'next/navigation';
 import { api, setAuthToken } from '@/services/api';
 import type { CartItem, Category, CurrencyCode, DeliveryAddress, Product, TeeSize, User } from '@/types/store';
 import { getEffectivePrice } from '@/lib/storeLogic';
+import {
+  CART_LOG_LIMIT,
+  diffCart,
+  loadCartLog,
+  saveCartLog,
+  type CartLogEntry,
+} from '@/features/cart/lib/cartLog';
 import { CURRENCY_STORAGE_KEY, convertCurrency, isCurrencyCode, normalizeCurrency } from '@/utils/currency';
 import { LANGUAGE_STORAGE_KEY, normalizeLanguage, translate } from '@/lib/i18n';
 import type { LanguageCode, TranslationKey } from '@/lib/i18n';
@@ -100,6 +107,9 @@ interface StoreContextValue {
   selectedProduct: Product | null;
   setSelectedProduct: (product: Product | null) => void;
   cart: CartItem[];
+  /** Timeline of cart changes kept on this device. */
+  cartLog: CartLogEntry[];
+  clearCartLog: () => void;
   wishlistIds: string[];
   globalSearch: string;
   setGlobalSearch: (q: string) => void;
@@ -110,9 +120,9 @@ interface StoreContextValue {
   refreshCatalog: () => Promise<void>;
   refreshAuth: () => Promise<void>;
   /** Resolves true when the item actually entered the cart. */
-  addToCart: (product: Product, size?: TeeSize, color?: string, quantity?: number) => Promise<boolean>;
-  updateCartQty: (productId: string, size: TeeSize, color: string, quantity: number) => Promise<void>;
-  removeFromCart: (productId: string, size: TeeSize, color: string) => Promise<void>;
+  addToCart: (product: Product, size?: string, color?: string, quantity?: number) => Promise<boolean>;
+  updateCartQty: (productId: string, size: string, color: string, quantity: number) => Promise<void>;
+  removeFromCart: (productId: string, size: string, color: string) => Promise<void>;
   clearCartLocal: () => void;
   toggleWishlist: (product: Product) => Promise<void>;
   loginUser: (email: string, password: string) => Promise<User>;
@@ -186,6 +196,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [productsLoading, setProductsLoading] = useState(true);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [cart, setCart] = useState<CartItem[]>([]);
+  const [cartLog, setCartLog] = useState<CartLogEntry[]>([]);
   const [wishlistIds, setWishlistIds] = useState<string[]>([]);
   const [currency, setCurrencyState] = useState<CurrencyCode>('USD');
   const [language, setLanguageState] = useState<LanguageCode>('en');
@@ -365,6 +376,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       if (Array.isArray(wishlistValues)) {
         setWishlistIds(wishlistValues.filter((id): id is string => typeof id === 'string'));
       }
+      setCartLog(loadCartLog());
     } catch {
       // Unreadable storage: start with an empty cart instead of failing to render.
     }
@@ -389,14 +401,39 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   }, [wishlistIds, storageReady]);
 
+  useEffect(() => {
+    if (!storageReady) return;
+    saveCartLog(cartLog);
+  }, [cartLog, storageReady]);
+
+  // Record cart changes by diffing consecutive snapshots, so every entry point
+  // (product page, quick panel, cart controls, checkout reset) is logged.
+  const previousCartRef = useRef<CartItem[] | null>(null);
+
+  useEffect(() => {
+    if (!storageReady) return;
+    const previous = previousCartRef.current;
+    previousCartRef.current = cart;
+    // The first snapshot is the cart restored from storage, not a change.
+    if (!previous) return;
+    const entries = diffCart(previous, cart);
+    if (entries.length === 0) return;
+    setCartLog((prev) => [...entries, ...prev].slice(0, CART_LOG_LIMIT));
+  }, [cart, storageReady]);
+
+  const clearCartLog = useCallback(() => {
+    setCartLog([]);
+  }, []);
+
   const addToCart = useCallback(
-    async (product: Product, size?: TeeSize, color?: string, quantity = 1) => {
+    async (product: Product, size?: string, color?: string, quantity = 1) => {
       if (product.stock <= 0) {
-        notify('This T-shirt is currently out of stock.', 'error');
+        notify('This product is currently out of stock.', 'error');
         return false;
       }
-      const chosenSize: TeeSize = size || product.sizes[1] || product.sizes[0] || 'M';
-      const chosenColor = color || product.colors[0]?.name || 'Black';
+      // Products outside apparel may have no size or colour options at all.
+      const chosenSize = size || product.sizes[1] || product.sizes[0] || '';
+      const chosenColor = color || product.colors[0]?.name || '';
 
       setCart((prev) => {
         const idx = prev.findIndex(
@@ -428,14 +465,17 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           ...prev,
         ];
       });
-      notify(`Added ${product.name} (${chosenSize}) to cart`, 'success');
+      notify(
+        chosenSize ? `Added ${product.name} (${chosenSize}) to cart` : `Added ${product.name} to cart`,
+        'success',
+      );
       return true;
     },
     [notify],
   );
 
   const updateCartQty = useCallback(
-    async (productId: string, size: TeeSize, color: string, quantity: number) => {
+    async (productId: string, size: string, color: string, quantity: number) => {
       setCart((prev) => {
         if (quantity <= 0) {
           return prev.filter((i) => !(i.productId === productId && i.size === size && i.color === color));
@@ -451,7 +491,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   );
 
   const removeFromCart = useCallback(
-    async (productId: string, size: TeeSize, color: string) => {
+    async (productId: string, size: string, color: string) => {
       setCart((prev) =>
         prev.filter((i) => !(i.productId === productId && i.size === size && i.color === color)),
       );
@@ -565,7 +605,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     await api.logout();
     setAuthToken(null);
     setUser(null);
-    notify('Signed out of E-shop All Admin', 'info');
+    notify('Signed out of E-shop Admin', 'info');
   }, [notify]);
 
   return (
@@ -593,6 +633,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         selectedProduct,
         setSelectedProduct,
         cart,
+        cartLog,
+        clearCartLog,
         wishlistIds,
         globalSearch,
         setGlobalSearch,

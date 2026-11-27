@@ -1,6 +1,6 @@
-# E-shop All — Production Monorepo (Next.js + Golang + MongoDB + Cloudinary + Cloudflare)
+# E-shop — Production Monorepo (Next.js + Golang + MongoDB + Cloudinary + Cloudflare)
 
-**E-shop All** is a minimalist monochrome T-shirt e-commerce platform built with a **Next.js App Router** frontend (configured for **Cloudflare Workers** via **OpenNext**), a **Golang (Go 1.23)** REST API using Clean Architecture, **MongoDB Atlas** with ACID transactions, and **Cloudinary** signed image uploads.
+**E-shop** is a minimalist monochrome T-shirt e-commerce platform built with a **Next.js App Router** frontend (configured for **Cloudflare Workers** via **OpenNext**), a **Golang (Go 1.23)** REST API using Clean Architecture, **MongoDB Atlas** with ACID transactions, and **Cloudinary** signed image uploads.
 
 ---
 
@@ -165,3 +165,16 @@ npm run cf:deploy
 ```
 
 Bind your custom domain `eshopall.example.com` to the `teestore-frontend` Cloudflare Worker in the Cloudflare dashboard.
+
+### 3. Deploy the storefront on Vercel
+
+The frontend is a standard Next.js 15 App Router app, so it deploys to Vercel without any extra adapter.
+
+1. Import the repository into Vercel and set **Root Directory** to `frontend` (framework preset: Next.js).
+2. Add the environment variables below for the Production (and Preview) environments:
+   - `NEXT_PUBLIC_APP_URL=https://your-production-domain` — used for canonical URLs, OpenGraph, `sitemap.xml` and `robots.txt`. If omitted, deployment builds fall back to `VERCEL_URL`.
+   - `NEXT_PUBLIC_API_URL` and `API_INTERNAL_URL` — the public Go API origin.
+   - `NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION` (optional) — Search Console HTML-tag token.
+3. Deploy, then submit `https://your-production-domain/sitemap.xml` in Google Search Console.
+
+SEO is configured in code: per-page metadata and canonicals, dynamic `robots.txt` (blocks admin/cart/checkout/account routes), dynamic `sitemap.xml` (home, catalogue, categories and every published product), OpenGraph/Twitter cards, and JSON-LD for Organization, WebSite, Product and BreadcrumbList. Admin, cart, checkout, favourites, orders, settings and sign-up pages are marked `noindex`.

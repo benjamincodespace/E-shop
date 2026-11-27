@@ -50,7 +50,9 @@ func NewRouter(
 
 	// Categories & Products
 	mux.HandleFunc("GET /api/categories", catH.ListCategories)
-	mux.HandleFunc("POST /api/admin/categories", middleware.RequireSuperAdmin(cfg, catH.CreateCategory))
+	// Any seller/admin can add a department (Electronics, Clothes, Food, …) and
+// immediately publish products inside it.
+mux.HandleFunc("POST /api/admin/categories", middleware.RequireAdmin(cfg, catH.CreateCategory))
 	mux.HandleFunc("GET /api/products", middleware.AttachOptionalAuth(cfg, catH.ListProducts))
 	mux.HandleFunc("GET /api/products/{slug}", middleware.AttachOptionalAuth(cfg, catH.GetProductBySlug))
 	mux.HandleFunc("POST /api/admin/products", middleware.RequireAdmin(cfg, catH.CreateProduct))

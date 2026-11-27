@@ -24,18 +24,18 @@ import { formatPrice } from '@/utils/currency';
 
 const HERO_SLIDES = [
   {
-    title: 'Premium T-Shirts',
-    subtitle: 'Style. Comfort. You.',
+    title: 'Electronics, Clothes & Food',
+    subtitle: 'Everything you need, in one shop.',
     cta: 'Shop Now',
     image: '/images/hero_monochrome_tee_1795513062252.jpg',
     category: 'all',
   },
   {
-    title: 'Heavyweight Studio Cuts',
-    subtitle: '280gsm organic cotton. Tailored drape.',
-    cta: 'Explore Streetwear',
+    title: 'Everyday Essentials',
+    subtitle: 'Fresh picks across every department.',
+    cta: 'Explore Categories',
     image: '/images/tee_charcoal_oversized_1795513063222.jpg',
-    category: 'streetwear',
+    category: 'all',
   },
 ];
 
@@ -215,8 +215,8 @@ export const StorefrontHome: React.FC<StorefrontHomeProps> = ({
             {[
               { icon: Truck, title: t('home.freeShipping'), sub: t('home.ordersOver', { amount: formatPrice(50, 'USD', currency) }) },
               { icon: RefreshCw, title: 'Easy Returns', sub: 'Within 7 days' },
-              { icon: ShieldCheck, title: 'Verified Quality', sub: '240gsm cotton' },
-              { icon: Shirt, title: 'Minimalist Fit', sub: 'Sizes S to XXL' },
+              { icon: ShieldCheck, title: 'Verified Sellers', sub: 'Checked quality' },
+              { icon: Shirt, title: 'Every Department', sub: 'Electronics, food & more' },
             ].map((item) => (
               <div
                 key={item.title}
@@ -309,7 +309,7 @@ export const StorefrontHome: React.FC<StorefrontHomeProps> = ({
           {categories.length > 0 && (
             <div className="pt-2">
               <div className="flex items-center justify-between mb-3">
-                <h2 className="font-display text-base font-bold text-neutral-950">{t('home.browseCategories')}</h2>
+                <h2 className="font-display text-base font-bold text-neutral-950">Shop by category</h2>
                 <button
                   type="button"
                   onClick={() => navigate({ page: 'catalog' })}
@@ -328,7 +328,7 @@ export const StorefrontHome: React.FC<StorefrontHomeProps> = ({
                   >
                     <p className="font-display text-xs font-bold text-neutral-950 truncate">{cat.name}</p>
                     <p className="text-[11px] text-neutral-500 mt-0.5 tabular-nums">
-                      {cat.productCount ?? 0} tees
+                      {cat.productCount ?? 0} product{cat.productCount === 1 ? '' : 's'}
                     </p>
                   </button>
                 ))}

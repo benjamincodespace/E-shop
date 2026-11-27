@@ -37,7 +37,7 @@ export const BrandLogo: React.FC<BrandLogoProps> = ({ inverted = false, subtitle
             inverted ? 'text-white' : 'text-neutral-950'
           }`}
         >
-          E-shop All
+          E-shop
         </span>
         {subtitle && (
           <span
