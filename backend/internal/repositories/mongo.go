@@ -172,6 +172,11 @@ func (s *StoreDB) NextOrderNumber(ctx context.Context) (string, error) {
 
 func ptrFloat(v float64) *float64 { return &v }
 
+// legacyClothingCategorySlugs are the clothing-only categories from before the
+// store became a general marketplace. They are kept only so existing stores can
+// fold their products into Clothes and drop the now-redundant categories.
+var legacyClothingCategorySlugs = []string{"classics", "essentials", "streetwear", "graphic", "athletic"}
+
 // ensureDefaultDepartments adds the marketplace's top-level departments to a
 // store that already has categories, without touching existing data.
 func (s *StoreDB) ensureDefaultDepartments(ctx context.Context) error {
@@ -191,6 +196,31 @@ func (s *StoreDB) ensureDefaultDepartments(ctx context.Context) error {
 		); err != nil {
 			return err
 		}
+	}
+
+	// Existing stores still carry the old clothing sub-categories (Classics,
+	// Essentials, Streetwear, …). Move their products into Clothes and remove
+	// the categories so shoppers only see the top-level departments.
+	var clothes models.Category
+	if err := s.DB.Collection("categories").FindOne(ctx, bson.M{"slug": "clothes"}).Decode(&clothes); err != nil {
+		return err
+	}
+	if _, err := s.DB.Collection("products").UpdateMany(
+		ctx,
+		bson.M{"categorySlug": bson.M{"$in": legacyClothingCategorySlugs}},
+		bson.M{"$set": bson.M{
+			"categoryId":   clothes.ID,
+			"categoryName": clothes.Name,
+			"categorySlug": clothes.Slug,
+		}},
+	); err != nil {
+		return err
+	}
+	if _, err := s.DB.Collection("categories").DeleteMany(
+		ctx,
+		bson.M{"slug": bson.M{"$in": legacyClothingCategorySlugs}},
+	); err != nil {
+		return err
 	}
 	return nil
 }
@@ -221,11 +251,6 @@ func (s *StoreDB) SeedIfEmpty(ctx context.Context) error {
 		catBySlug[seedCats[i].Slug] = seedCats[i]
 	}
 
-	// The seeded apparel products were written against the old clothing-only
-	// categories; keep them resolvable by folding those slugs into Clothes.
-	for _, legacy := range []string{"classics", "essentials", "streetwear", "graphic", "athletic"} {
-		catBySlug[legacy] = catBySlug["clothes"]
-	}
 	if _, err := s.DB.Collection("categories").InsertMany(ctx, catDocs); err != nil {
 		return err
 	}
@@ -267,7 +292,7 @@ func (s *StoreDB) SeedIfEmpty(ctx context.Context) error {
 		makeProd(
 			"Classic Crest Tee", "classic-crest-tee",
 			"Soft, breathable 240gsm combed cotton T-shirt with a crisp ribbed collar and tonal micro-crest embroidery. Perfect for everyday monochrome style.",
-			"classics", 22, ptrFloat(15),
+			"clothes", 22, ptrFloat(15),
 			[]string{imgBlack, imgCharcoal, imgBone},
 			[]string{"S", "M", "L", "XL", "XXL"},
 			[]models.TeeColorOption{{Name: "Black", Hex: "#111111"}, {Name: "White", Hex: "#F4F4F5"}, {Name: "Graphite", Hex: "#4B5563"}},
@@ -278,7 +303,7 @@ func (s *StoreDB) SeedIfEmpty(ctx context.Context) error {
 		makeProd(
 			"Minimalist White Tee", "minimalist-white-tee",
 			"Pure optic white organic ring-spun cotton crewneck featuring a centered minimalist typographic mark and zero-twist softness.",
-			"essentials", 25, ptrFloat(18),
+			"clothes", 25, ptrFloat(18),
 			[]string{imgWhite, imgBone, imgBlack},
 			[]string{"S", "M", "L", "XL", "XXL"},
 			[]models.TeeColorOption{{Name: "White", Hex: "#FFFFFF"}, {Name: "Bone", Hex: "#EAE6DF"}, {Name: "Black", Hex: "#111111"}},
@@ -289,7 +314,7 @@ func (s *StoreDB) SeedIfEmpty(ctx context.Context) error {
 		makeProd(
 			"STRCTR Boxy Tee", "strctr-boxy-tee",
 			"Washed charcoal 280gsm heavyweight jersey with a structured boxy cut, dropped shoulders, and clean architectural chest print.",
-			"streetwear", 28, ptrFloat(20),
+			"clothes", 28, ptrFloat(20),
 			[]string{imgCharcoal, imgBlack, imgGraphite},
 			[]string{"S", "M", "L", "XL"},
 			[]models.TeeColorOption{{Name: "Washed Charcoal", Hex: "#27272A"}, {Name: "Jet Black", Hex: "#09090B"}},
@@ -300,7 +325,7 @@ func (s *StoreDB) SeedIfEmpty(ctx context.Context) error {
 		makeProd(
 			"Atelier Emblem Tee", "atelier-emblem-tee",
 			"Alabaster off-white heavyweight cotton tee printed with an ink-black geometric triangle crest. Pre-shrunk for consistent sizing.",
-			"graphic", 28, ptrFloat(22),
+			"clothes", 28, ptrFloat(22),
 			[]string{imgBone, imgWhite, imgCharcoal},
 			[]string{"S", "M", "L", "XL", "XXL"},
 			[]models.TeeColorOption{{Name: "Alabaster", Hex: "#ECE8E1"}, {Name: "White", Hex: "#FFFFFF"}},
@@ -311,7 +336,7 @@ func (s *StoreDB) SeedIfEmpty(ctx context.Context) error {
 		makeProd(
 			"Kinetic Horizon Tee", "kinetic-horizon-tee",
 			"Dark heather graphite performance cotton-modal blend with a sharp white tonal chest bar and moisture-wicking knit.",
-			"athletic", 24, ptrFloat(17),
+			"clothes", 24, ptrFloat(17),
 			[]string{imgGraphite, imgBlack, imgCharcoal},
 			[]string{"S", "M", "L", "XL"},
 			[]models.TeeColorOption{{Name: "Graphite", Hex: "#3F3F46"}, {Name: "Black", Hex: "#111111"}},
@@ -322,7 +347,7 @@ func (s *StoreDB) SeedIfEmpty(ctx context.Context) error {
 		makeProd(
 			"Noir Studio Crew", "noir-studio-crew",
 			"Deep carbon-dyed heavyweight Supima cotton crewneck with reinforced twin-needle cuffs and a refined tailored shoulder.",
-			"classics", 34, nil,
+			"clothes", 34, nil,
 			[]string{imgBlack, imgGraphite},
 			[]string{"M", "L", "XL", "XXL"},
 			[]models.TeeColorOption{{Name: "Carbon Black", Hex: "#0A0A0B"}},
@@ -333,7 +358,7 @@ func (s *StoreDB) SeedIfEmpty(ctx context.Context) error {
 		makeProd(
 			"Monolith Oversized Tee", "monolith-oversized-tee",
 			"Relaxed studio drape crafted from 300gsm enzyme-washed organic cotton with minimal tonal collar binding.",
-			"streetwear", 42, ptrFloat(36),
+			"clothes", 42, ptrFloat(36),
 			[]string{imgCharcoal, imgBone},
 			[]string{"S", "M", "L", "XL"},
 			[]models.TeeColorOption{{Name: "Charcoal", Hex: "#27272A"}, {Name: "Bone", Hex: "#E5E0D8"}},
@@ -344,7 +369,7 @@ func (s *StoreDB) SeedIfEmpty(ctx context.Context) error {
 		makeProd(
 			"Pure Canvas Tee", "pure-canvas-tee",
 			"Clean bone-white everyday staple featuring an ultra-soft brushed interior and breathable side-seamed construction.",
-			"essentials", 19, ptrFloat(14),
+			"clothes", 19, ptrFloat(14),
 			[]string{imgWhite, imgBone},
 			[]string{"S", "M", "L", "XL", "XXL"},
 			[]models.TeeColorOption{{Name: "White", Hex: "#FFFFFF"}, {Name: "Bone", Hex: "#F3EFEA"}},
