@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import {
+  Apple,
   ArrowRight,
   ChevronLeft,
   ChevronRight,
@@ -11,6 +12,7 @@ import {
   RefreshCw,
   ShieldCheck,
   Shirt,
+  Smartphone,
   Truck,
 } from 'lucide-react';
 import type { Category, Product } from '@/types/store';
@@ -38,6 +40,12 @@ const HERO_SLIDES = [
     category: 'all',
   },
 ];
+
+const DEPARTMENT_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
+  electronics: Smartphone,
+  clothes: Shirt,
+  food: Apple,
+};
 
 interface StorefrontHomeProps {
   initialCategories?: Category[];
@@ -150,6 +158,45 @@ export const StorefrontHome: React.FC<StorefrontHomeProps> = ({
 
         {/* Center Storefront Content */}
         <section className="lg:col-span-6 space-y-6 lg:h-full lg:min-h-0 lg:overflow-y-auto lg:overscroll-contain lg:pb-6 lg:pr-1.5">
+          {/* Department Picker — shoppers choose a category before browsing */}
+          {categories.length > 0 && (
+            <div>
+              <div className="flex items-center justify-between mb-2.5">
+                <h2 className="font-display text-base font-bold text-neutral-950">{t('home.browseCategories')}</h2>
+                <button
+                  type="button"
+                  onClick={() => navigate({ page: 'catalog' })}
+                  className="text-xs font-medium text-neutral-600 hover:text-neutral-950 cursor-pointer"
+                >
+                  All Categories
+                </button>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                {categories.map((cat) => {
+                  const Icon = DEPARTMENT_ICONS[cat.slug] || LayoutGrid;
+                  return (
+                    <button
+                      key={cat.id}
+                      type="button"
+                      onClick={() => navigate({ page: 'catalog', category: cat.slug })}
+                      className="group flex items-center gap-3 p-3 rounded-2xl bg-white hover:bg-neutral-100 border border-neutral-200/70 hover:border-neutral-950 text-left transition-colors cursor-pointer"
+                    >
+                      <span className="w-9 h-9 rounded-xl bg-neutral-100 text-neutral-900 flex items-center justify-center shrink-0 group-hover:bg-white">
+                        <Icon className="w-4 h-4" />
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block font-display text-xs font-bold text-neutral-950 truncate">{cat.name}</span>
+                        <span className="block text-[11px] text-neutral-500 mt-0.5 tabular-nums">
+                          {cat.productCount ?? 0} product{cat.productCount === 1 ? '' : 's'}
+                        </span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {/* Hero Promotional Banner */}
           <div className="relative rounded-3xl overflow-hidden bg-neutral-100 border border-neutral-200/70 min-h-[220px] sm:min-h-[260px] flex items-center">
             <SafeImage
@@ -305,36 +352,6 @@ export const StorefrontHome: React.FC<StorefrontHomeProps> = ({
             </div>
           )}
 
-          {/* Category Directory Strip */}
-          {categories.length > 0 && (
-            <div className="pt-2">
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="font-display text-base font-bold text-neutral-950">Shop by category</h2>
-                <button
-                  type="button"
-                  onClick={() => navigate({ page: 'catalog' })}
-                  className="text-xs font-medium text-neutral-600 hover:text-neutral-950 cursor-pointer"
-                >
-                  All Categories
-                </button>
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
-                {categories.map((cat) => (
-                  <button
-                    key={cat.id}
-                    type="button"
-                    onClick={() => navigate({ page: 'catalog', category: cat.slug })}
-                    className="p-3 rounded-2xl bg-neutral-50 hover:bg-neutral-100 border border-neutral-200/70 text-left transition-colors cursor-pointer"
-                  >
-                    <p className="font-display text-xs font-bold text-neutral-950 truncate">{cat.name}</p>
-                    <p className="text-[11px] text-neutral-500 mt-0.5 tabular-nums">
-                      {cat.productCount ?? 0} product{cat.productCount === 1 ? '' : 's'}
-                    </p>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
         </section>
 
         {/* Right Product Details Panel */}
