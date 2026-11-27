@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowRight, ChevronLeft, ChevronRight, LayoutGrid, List, RotateCcw } from 'lucide-react';
+import { ArrowRight, LayoutGrid, List, RotateCcw } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
 import { filterAndSortProducts } from '@/lib/storeLogic';
 import { formatPrice } from '@/utils/currency';
@@ -15,6 +15,10 @@ interface CatalogViewProps {
   initialCategories?: Category[];
   initialProducts?: Product[];
 }
+
+// Products render in batches that grow as the shopper scrolls, so a long
+// catalog is never painted all at once.
+const BATCH_SIZE = 9;
 
 const PRICE_RANGES: Array<{ key: PriceRangeKey; label: string }> = [
   { key: 'all', label: 'All Prices' },
@@ -60,12 +64,11 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
   const [priceRange, setPriceRange] = useState<PriceRangeKey>('all');
   const [sortBy, setSortBy] = useState<SortOption>('newest');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
-  const [page, setPage] = useState(1);
-  const perPage = 6;
+  const [visibleCount, setVisibleCount] = useState(BATCH_SIZE);
 
   useEffect(() => {
     setCategorySlug(initialCategory || 'all');
-    setPage(1);
+    setVisibleCount(BATCH_SIZE);
   }, [initialCategory]);
 
   const filtered = useMemo(
@@ -97,25 +100,28 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
     }
   };
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / perPage));
-  const safePage = Math.min(page, totalPages);
-  const pagedProducts = filtered.slice((safePage - 1) * perPage, safePage * perPage);
+  const visibleProducts = filtered.slice(0, visibleCount);
+  const hasMore = visibleCount < filtered.length;
 
   const gridRef = useRef<HTMLElement | null>(null);
-  const mountedRef = useRef(false);
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
 
-  // A new page renders above the pagination controls, so bring the results back
-  // into view instead of leaving the user staring at the page numbers.
+  // Infinite scroll: the next batch is only rendered once the sentinel below
+  // the grid comes near the viewport.
   useEffect(() => {
-    if (!mountedRef.current) {
-      mountedRef.current = true;
-      return;
-    }
-    const el = gridRef.current;
-    if (!el) return;
-    const top = el.getBoundingClientRect().top + window.scrollY - 88;
-    window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
-  }, [safePage]);
+    const node = sentinelRef.current;
+    if (!node || !hasMore) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setVisibleCount((count) => Math.min(count + BATCH_SIZE, filtered.length));
+        }
+      },
+      { rootMargin: '600px 0px' },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [hasMore, filtered.length, visibleCount]);
 
   // Shoppers choose a department (Electronics, Clothes, Food, …) before they
   // see any products; searching sidesteps the chooser.
@@ -127,7 +133,7 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
     setPriceRange('all');
     setSortBy('newest');
     setGlobalSearch('');
-    setPage(1);
+    setVisibleCount(BATCH_SIZE);
   };
 
   return (
@@ -142,7 +148,7 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
                 type="button"
                 onClick={() => {
                   setCategorySlug('all');
-                  setPage(1);
+                  setVisibleCount(BATCH_SIZE);
                 }}
                 className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition-colors cursor-pointer ${
                   categorySlug === 'all'
@@ -159,7 +165,7 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
                   type="button"
                   onClick={() => {
                     setCategorySlug(cat.slug);
-                    setPage(1);
+                    setVisibleCount(BATCH_SIZE);
                   }}
                   className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition-colors cursor-pointer ${
                     categorySlug === cat.slug
@@ -188,7 +194,7 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
                     checked={priceRange === r.key}
                     onChange={() => {
                       setPriceRange(r.key);
-                      setPage(1);
+                      setVisibleCount(BATCH_SIZE);
                     }}
                     className="accent-neutral-950 w-3.5 h-3.5"
                   />
@@ -207,7 +213,7 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
               value={sortBy}
               onChange={(e) => {
                 setSortBy(e.target.value as SortOption);
-                setPage(1);
+                setVisibleCount(BATCH_SIZE);
               }}
               className="w-full rounded-xl border border-neutral-200 bg-white px-3 py-2 text-xs font-medium text-neutral-800 focus:outline-none focus:border-neutral-950"
             >
@@ -238,7 +244,7 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
                   type="button"
                   onClick={() => {
                     setCategorySlug(cat.slug);
-                    setPage(1);
+                    setVisibleCount(BATCH_SIZE);
                   }}
                   className="group text-left rounded-2xl border border-neutral-200/80 bg-white p-5 hover:border-neutral-950 hover:shadow-[0_8px_24px_rgba(0,0,0,0.06)] transition-all cursor-pointer"
                 >
@@ -321,7 +327,7 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
                 <ProductCardSkeleton key={n} />
               ))}
             </div>
-          ) : pagedProducts.length === 0 ? (
+          ) : visibleProducts.length === 0 ? (
             <div className="bg-neutral-50 border border-neutral-200/80 rounded-2xl p-12 text-center">
               <h2 className="font-display text-lg font-bold text-neutral-950">No products match these filters</h2>
               <p className="mt-1.5 text-xs text-neutral-500">
@@ -343,48 +349,27 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
                   : 'flex flex-col gap-3.5'
               }
             >
-              {pagedProducts.map((p) => (
+              {visibleProducts.map((p) => (
                 <ProductCard key={p.id} product={p} layout={viewMode} />
               ))}
             </div>
           )}
 
-          {/* Pagination */}
-          {totalPages > 1 && (
-            <nav aria-label="Pagination" className="mt-8 flex items-center justify-center gap-1.5">
-              <button
-                type="button"
-                disabled={safePage <= 1}
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                aria-label="Previous page"
-                className="w-9 h-9 rounded-xl border border-neutral-200 flex items-center justify-center text-neutral-700 disabled:opacity-40 hover:border-neutral-950 cursor-pointer"
-              >
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-              {Array.from({ length: totalPages }, (_, i) => i + 1).map((pNum) => (
-                <button
-                  key={pNum}
-                  type="button"
-                  onClick={() => setPage(pNum)}
-                  className={`w-9 h-9 rounded-xl text-xs font-semibold tabular-nums cursor-pointer ${
-                    safePage === pNum
-                      ? 'bg-neutral-950 text-white'
-                      : 'border border-neutral-200 text-neutral-700 hover:border-neutral-950'
-                  }`}
-                >
-                  {pNum}
-                </button>
+          {/* Scroll sentinel: the next batch loads as it approaches the viewport. */}
+          {hasMore && (
+            <div
+              ref={sentinelRef}
+              aria-hidden="true"
+              className={
+                viewMode === 'grid'
+                  ? 'mt-4 grid grid-cols-1 sm:grid-cols-3 gap-4'
+                  : 'mt-3.5 flex flex-col gap-3.5'
+              }
+            >
+              {[0, 1, 2].map((n) => (
+                <ProductCardSkeleton key={n} />
               ))}
-              <button
-                type="button"
-                disabled={safePage >= totalPages}
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                aria-label="Next page"
-                className="w-9 h-9 rounded-xl border border-neutral-200 flex items-center justify-center text-neutral-700 disabled:opacity-40 hover:border-neutral-950 cursor-pointer"
-              >
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            </nav>
+            </div>
           )}
           </div>
         </section>
