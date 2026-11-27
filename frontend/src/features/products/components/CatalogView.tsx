@@ -1,13 +1,14 @@
 'use client';
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowRight, LayoutGrid, List, RotateCcw } from 'lucide-react';
+import { ArrowRight, RotateCcw } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
 import { filterAndSortProducts } from '@/lib/storeLogic';
 import { formatPrice } from '@/utils/currency';
 import type { Category, PriceRangeKey, Product, SortOption } from '@/types/store';
 import { ProductCard } from '@/features/products/components/ProductCard';
 import { ProductCardSkeleton } from '@/components/ProductCardSkeleton';
+import { ViewModeToggle, type ProductViewMode } from '@/components/ViewModeToggle';
 
 interface CatalogViewProps {
   initialCategory?: string;
@@ -63,7 +64,7 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
   const [categorySlug, setCategorySlug] = useState<string>(initialCategory || 'all');
   const [priceRange, setPriceRange] = useState<PriceRangeKey>('all');
   const [sortBy, setSortBy] = useState<SortOption>('newest');
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [viewMode, setViewMode] = useState<ProductViewMode>('single');
   const [visibleCount, setVisibleCount] = useState(BATCH_SIZE);
 
   useEffect(() => {
@@ -296,33 +297,18 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
                 </button>
               )}
 
-              <div className="flex items-center bg-neutral-100 p-1 rounded-xl">
-                <button
-                  type="button"
-                  onClick={() => setViewMode('grid')}
-                  aria-label="Grid view"
-                  className={`p-1.5 rounded-lg cursor-pointer ${
-                    viewMode === 'grid' ? 'bg-white text-neutral-950 shadow-sm' : 'text-neutral-500'
-                  }`}
-                >
-                  <LayoutGrid className="w-4 h-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setViewMode('list')}
-                  aria-label="List view"
-                  className={`p-1.5 rounded-lg cursor-pointer ${
-                    viewMode === 'list' ? 'bg-white text-neutral-950 shadow-sm' : 'text-neutral-500'
-                  }`}
-                >
-                  <List className="w-4 h-4" />
-                </button>
-              </div>
+              <ViewModeToggle value={viewMode} onChange={setViewMode} />
             </div>
           </div>
 
           {loading ? (
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div
+              className={
+                viewMode === 'grid'
+                  ? 'grid grid-cols-1 sm:grid-cols-3 gap-4'
+                  : 'flex flex-col gap-3.5'
+              }
+            >
               {[1, 2, 3, 4, 5, 6].map((n) => (
                 <ProductCardSkeleton key={n} />
               ))}
@@ -350,7 +336,11 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
               }
             >
               {visibleProducts.map((p) => (
-                <ProductCard key={p.id} product={p} layout={viewMode} />
+                <ProductCard
+                  key={p.id}
+                  product={p}
+                  layout={viewMode === 'grid' ? 'grid' : 'list'}
+                />
               ))}
             </div>
           )}

@@ -19,6 +19,7 @@ import type { Category, Product } from '@/types/store';
 import { useStore } from '@/context/StoreContext';
 import { ProductCard } from '@/features/products/components/ProductCard';
 import { ProductCardSkeleton } from './ProductCardSkeleton';
+import { ViewModeToggle, type ProductViewMode } from './ViewModeToggle';
 import { ProductQuickPanel } from '@/features/products/components/ProductQuickPanel';
 import { SafeImage } from './SafeImage';
 import { filterAndSortProducts } from '@/lib/storeLogic';
@@ -80,6 +81,7 @@ export const StorefrontHome: React.FC<StorefrontHomeProps> = ({
   const loading = productsLoading && products.length === 0;
 
   const [heroIdx, setHeroIdx] = useState(0);
+  const [viewMode, setViewMode] = useState<ProductViewMode>('single');
   const [activeFeedTab, setActiveFeedTab] = useState<'popular' | 'newest' | 'rated'>('popular');
 
   const slide = HERO_SLIDES[heroIdx];
@@ -303,19 +305,28 @@ export const StorefrontHome: React.FC<StorefrontHomeProps> = ({
               ))}
             </div>
 
-            <button
-              type="button"
-              onClick={() => navigate({ page: 'catalog' })}
-              className="text-xs font-semibold text-neutral-700 hover:text-neutral-950 inline-flex items-center gap-1 whitespace-nowrap shrink-0 cursor-pointer"
-            >
-              <span>{t('home.seeAll')}</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </button>
+            <div className="flex items-center gap-2 shrink-0">
+              <ViewModeToggle value={viewMode} onChange={setViewMode} />
+              <button
+                type="button"
+                onClick={() => navigate({ page: 'catalog' })}
+                className="text-xs font-semibold text-neutral-700 hover:text-neutral-950 inline-flex items-center gap-1 whitespace-nowrap cursor-pointer"
+              >
+                <span>{t('home.seeAll')}</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
 
           {/* Product Grid */}
           {loading ? (
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+            <div
+              className={
+                viewMode === 'grid'
+                  ? 'grid grid-cols-1 sm:grid-cols-3 gap-3.5'
+                  : 'flex flex-col gap-3.5'
+              }
+            >
               {[1, 2, 3, 4, 5, 6].map((n) => (
                 <ProductCardSkeleton key={n} />
               ))}
@@ -335,11 +346,18 @@ export const StorefrontHome: React.FC<StorefrontHomeProps> = ({
               </button>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+            <div
+              className={
+                viewMode === 'grid'
+                  ? 'grid grid-cols-1 sm:grid-cols-3 gap-3.5'
+                  : 'flex flex-col gap-3.5'
+              }
+            >
               {displayProducts.map((prod) => (
                 <ProductCard
                   key={prod.id}
                   product={prod}
+                  layout={viewMode === 'grid' ? 'grid' : 'list'}
                   isSelected={selectedProduct?.id === prod.id}
                   onSelect={(p) => {
                     setSelectedProduct(p);
